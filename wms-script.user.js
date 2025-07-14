@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         WMS Container Override Enhanced - Manual Updates
 // @namespace    http://tampermonkey.net/
-// @version      3.0
+// @version      2.8
 // @description  Автозамена контейнеров WMS с ручными обновлениями через GitHub
 // @author       Жигалов Ю.В.
 // @match        https://wms.vseinstrumenti.ru/*
@@ -18,27 +18,71 @@
 (function() {
     'use strict';
 
-    // ========== НАСТРОЙКИ АВТООБНОВЛЕНИЯ ==========
+    // ========== УПРОЩЕННАЯ СИСТЕМА ОБНОВЛЕНИЙ ==========
     
     const UPDATE_CONFIG = {
-        // URL для проверки версий и настроек
-        VERSION_CHECK_URL: 'https://raw.githubusercontent.com/Pwnzord123/OtgruzkaSPB/main/version.json',
-        
-        // URL для загрузки обновлений
-        SCRIPT_UPDATE_URL: 'https://raw.githubusercontent.com/Pwnzord123/OtgruzkaSPB/main/wms-script.user.js',
-        
-        // ОТКЛЮЧЕНЫ автоматические проверки - только по кнопке!
-        CHECK_INTERVAL: 999999, // Очень редко (практически никогда)
-        
-        // ОТКЛЮЧЕНЫ автоматические обновления
-        AUTO_APPLY_MINOR: false,
-        
-        // Показывать уведомления об обновлениях
-        SHOW_NOTIFICATIONS: true
+        // Прямая ссылка для обновления
+        DIRECT_UPDATE_URL: 'https://raw.githubusercontent.com/Pwnzord123/OtgruzkaSPB/main/wms-script.user.js',
+        GITHUB_REPO: 'https://github.com/Pwnzord123/OtgruzkaSPB'
     };
 
     // Текущая версия скрипта
-    const CURRENT_VERSION = '3.0';
+    const CURRENT_VERSION = '2.8';
+
+    // Простая функция открытия ссылки для обновления
+    function openUpdateLink() {
+        console.log('🔄 Открываем ссылку для обновления...');
+        showNotification('Открываем страницу обновления...', 'info');
+        window.open(UPDATE_CONFIG.DIRECT_UPDATE_URL, '_blank');
+        
+        setTimeout(() => {
+            showUpdateInstructions();
+        }, 500);
+    }
+
+    // Показать инструкции по обновлению
+    function showUpdateInstructions() {
+        const modal = document.createElement('div');
+        modal.style.cssText = `
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.7); z-index: 99999; display: flex;
+            align-items: center; justify-content: center; font-family: Arial, sans-serif;
+        `;
+        
+        modal.innerHTML = `
+            <div style="background: white; border-radius: 10px; padding: 25px; max-width: 450px; width: 90%; box-shadow: 0 10px 30px rgba(0,0,0,0.3);">
+                <div style="text-align: center; margin-bottom: 20px;">
+                    <div style="font-size: 18px; font-weight: bold; color: #4CAF50; margin-bottom: 10px;">
+                        🚀 Страница обновления открыта
+                    </div>
+                </div>
+                
+                <div style="margin-bottom: 20px;">
+                    <div style="font-weight: bold; margin-bottom: 10px; color: #333;">📋 Следующие шаги:</div>
+                    <div style="background: #f5f5f5; padding: 15px; border-radius: 5px; font-size: 13px; line-height: 1.5;">
+                        <div style="margin-bottom: 8px;">1️⃣ В новой вкладке Tampermonkey покажет кнопку <strong>"Обновить"</strong></div>
+                        <div style="margin-bottom: 8px;">2️⃣ Нажмите <strong>"Обновить"</strong> или <strong>"Переустановить"</strong></div>
+                        <div style="margin-bottom: 8px;">3️⃣ Закройте вкладку обновления</div>
+                        <div>4️⃣ Перезагрузите эту страницу (<strong>F5</strong>)</div>
+                    </div>
+                </div>
+                
+                <div style="text-align: center;">
+                    <button onclick="this.closest('div').parentElement.remove()" 
+                            style="padding: 10px 20px; background: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 14px;">
+                        👍 Понятно
+                    </button>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+        setTimeout(() => {
+            if (modal.parentElement) {
+                modal.remove();
+            }
+        }, 15000);
+    }
 
     // ========== КОНФИГУРАЦИЯ ==========
 
@@ -59,7 +103,7 @@
     // Пресеты для всех столов комплектации (ВСТРОЕННЫЕ ДАННЫЕ) - по буквенным названиям
     const TABLE_PRESETS = {
         "Стол 12": {
-            "Парнас": "989898989989",
+            "Парнас": "23223333333223",
             "Международная": "2---Международная",
             "Всеволожск": "3---Всеволожск",
             "Красное": "4---Красное Село",
@@ -180,395 +224,6 @@
         container2: null,
         lastUpdate: 0
     };
-
-    // ========== СИСТЕМА ОБНОВЛЕНИЙ (ТОЛЬКО РУЧНЫЕ) ==========
-    
-    // Парсинг версии
-    function parseVersion(version) {
-        const parts = version.split('.').map(Number);
-        return {
-            major: parts[0] || 0,
-            minor: parts[1] || 0,
-            patch: parts[2] || 0,
-            full: version
-        };
-    }
-    
-    // Сравнение версий
-    function compareVersions(current, remote) {
-        const curr = parseVersion(current);
-        const rem = parseVersion(remote);
-        
-        if (rem.major > curr.major) return 'major';
-        if (rem.major < curr.major) return 'older';
-        
-        if (rem.minor > curr.minor) return 'minor';
-        if (rem.minor < curr.minor) return 'older';
-        
-        if (rem.patch > curr.patch) return 'patch';
-        if (rem.patch < curr.patch) return 'older';
-        
-        return 'same';
-    }
-    
-    // Проверка обновлений (ТОЛЬКО ПО КНОПКЕ!)
-    function checkForUpdates(manual = false) {
-        console.log('🔍 Проверка обновлений...');
-        
-        if (typeof GM_xmlhttpRequest === 'undefined') {
-            console.log('GM_xmlhttpRequest недоступен');
-            if (manual) {
-                showNotification('Автообновления недоступны (отсутствуют разрешения)', 'error');
-            }
-            return;
-        }
-        
-        // Показать, что идет проверка
-        if (manual) {
-            showNotification('Проверяем обновления...', 'info');
-        }
-        
-        GM_xmlhttpRequest({
-            method: 'GET',
-            url: UPDATE_CONFIG.VERSION_CHECK_URL,
-            timeout: 10000,
-            onload: function(response) {
-                try {
-                    const data = JSON.parse(response.responseText);
-                    handleUpdateCheck(data, manual);
-                } catch (e) {
-                    console.error('Ошибка парсинга ответа сервера:', e);
-                    if (manual) {
-                        showNotification('Ошибка проверки обновлений', 'error');
-                    }
-                }
-            },
-            onerror: function() {
-                console.error('Ошибка связи с сервером обновлений');
-                if (manual) {
-                    showNotification('Сервер обновлений недоступен', 'error');
-                }
-            }
-        });
-    }
-    
-    // Обработка результата проверки
-    function handleUpdateCheck(data, manual) {
-        const { version, changelog, config, forceUpdate, critical } = data;
-        
-        const comparison = compareVersions(CURRENT_VERSION, version);
-        
-        if (comparison === 'same' || comparison === 'older') {
-            console.log('✅ Версия актуальна');
-            if (manual) {
-                showNotification('У вас установлена актуальная версия', 'success');
-            }
-            
-            // Проверяем обновления конфигурации
-            if (config) {
-                updateConfiguration(config);
-            }
-            return;
-        }
-        
-        console.log(`🆕 Доступна новая версия: ${version} (текущая: ${CURRENT_VERSION})`);
-        
-        // ВСЕГДА показываем пользователю (никаких автообновлений)
-        showUpdateNotification(version, changelog, critical, forceUpdate);
-    }
-    
-    // Показать уведомление об обновлении
-    function showUpdateNotification(version, changelog, critical, forceUpdate) {
-        const urgencyText = critical ? '🚨 КРИТИЧЕСКОЕ' : forceUpdate ? '⚠️ ВАЖНОЕ' : '📢';
-        const title = `${urgencyText} Обновление ${version}`;
-        
-        // Создаем модальное окно для обновления
-        createUpdateModal(version, changelog, critical, forceUpdate);
-        
-        if (UPDATE_CONFIG.SHOW_NOTIFICATIONS && typeof GM_notification !== 'undefined') {
-            GM_notification({
-                title: title,
-                text: changelog ? changelog.substring(0, 100) + '...' : 'Доступна новая версия',
-                timeout: critical ? 0 : 5000,
-                onclick: () => {
-                    document.getElementById('wms-update-modal')?.style.setProperty('display', 'flex');
-                }
-            });
-        }
-    }
-    
-    // Создать модальное окно обновления
-    function createUpdateModal(version, changelog, critical, forceUpdate) {
-        // Удаляем существующее модальное окно
-        const existingModal = document.getElementById('wms-update-modal');
-        if (existingModal) {
-            existingModal.remove();
-        }
-        
-        const modal = document.createElement('div');
-        modal.id = 'wms-update-modal';
-        modal.style.cssText = `
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0,0,0,0.7);
-            z-index: 99999;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-family: Arial, sans-serif;
-        `;
-        
-        const urgencyColor = critical ? '#f44336' : forceUpdate ? '#FF9800' : '#4CAF50';
-        const urgencyText = critical ? '🚨 КРИТИЧЕСКОЕ ОБНОВЛЕНИЕ' : forceUpdate ? '⚠️ ВАЖНОЕ ОБНОВЛЕНИЕ' : '📢 ДОСТУПНО ОБНОВЛЕНИЕ';
-        
-        modal.innerHTML = `
-            <div style="background: white; border-radius: 10px; padding: 25px; max-width: 500px; width: 90%; box-shadow: 0 10px 30px rgba(0,0,0,0.3);">
-                <div style="text-align: center; margin-bottom: 20px;">
-                    <div style="font-size: 18px; font-weight: bold; color: ${urgencyColor}; margin-bottom: 10px;">
-                        ${urgencyText}
-                    </div>
-                    <div style="font-size: 24px; font-weight: bold; color: #333;">
-                        Версия ${version}
-                    </div>
-                    <div style="font-size: 14px; color: #666;">
-                        Текущая версия: ${CURRENT_VERSION}
-                    </div>
-                </div>
-                
-                ${changelog ? `
-                    <div style="margin-bottom: 20px;">
-                        <div style="font-weight: bold; margin-bottom: 10px; color: #333;">📋 Что нового:</div>
-                        <div style="background: #f5f5f5; padding: 15px; border-radius: 5px; font-size: 14px; max-height: 200px; overflow-y: auto;">
-                            ${changelog.replace(/\n/g, '<br>')}
-                        </div>
-                    </div>
-                ` : ''}
-                
-                <div style="display: flex; gap: 10px; justify-content: center;">
-                    <button id="wms-update-now" style="padding: 12px 24px; background: ${urgencyColor}; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 14px; font-weight: bold;">
-                        🚀 Обновить сейчас
-                    </button>
-                    <button id="wms-update-close" style="padding: 12px 24px; background: #9E9E9E; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 14px;">
-                        ❌ Не сейчас
-                    </button>
-                </div>
-                
-                ${critical ? `
-                    <div style="margin-top: 15px; padding: 10px; background: #ffebee; border-radius: 5px; font-size: 12px; color: #c62828; text-align: center;">
-                        ⚠️ Это критическое обновление безопасности. Настоятельно рекомендуется установить немедленно.
-                    </div>
-                ` : ''}
-            </div>
-        `;
-        
-        document.body.appendChild(modal);
-        
-        // Обработчики событий
-        document.getElementById('wms-update-now').addEventListener('click', () => {
-            modal.remove();
-            downloadAndApplyUpdate(version, changelog, false);
-        });
-        
-        document.getElementById('wms-update-close').addEventListener('click', () => {
-            modal.remove();
-            showNotification('Обновление отложено', 'info');
-        });
-        
-        // Закрытие по клику вне модального окна (только для некритических)
-        if (!critical) {
-            modal.addEventListener('click', (e) => {
-                if (e.target === modal) {
-                    modal.remove();
-                }
-            });
-        }
-    }
-    
-    // Загрузка и применение обновления
-    function downloadAndApplyUpdate(version, changelog, isAuto) {
-        showNotification('Загрузка обновления...', 'info');
-        
-        GM_xmlhttpRequest({
-            method: 'GET',
-            url: UPDATE_CONFIG.SCRIPT_UPDATE_URL,
-            timeout: 30000,
-            onload: function(response) {
-                try {
-                    const newCode = response.responseText;
-                    
-                    // Простая проверка валидности кода
-                    if (newCode.includes('// ==UserScript==') && newCode.includes('WMS Container Override')) {
-                        applyUpdate(newCode, version, changelog, isAuto);
-                    } else {
-                        throw new Error('Полученный код не прошел проверку валидности');
-                    }
-                } catch (e) {
-                    console.error('Ошибка применения обновления:', e);
-                    showNotification('Ошибка применения обновления', 'error');
-                }
-            },
-            onerror: function() {
-                console.error('Ошибка загрузки обновления');
-                showNotification('Ошибка загрузки обновления', 'error');
-            }
-        });
-    }
-    
-    // Применение обновления
-    function applyUpdate(newCode, version, changelog, isAuto) {
-        // Сохраняем новый код для применения при следующей перезагрузке
-        if (typeof GM_setValue !== 'undefined') {
-            GM_setValue('wms_pending_update', JSON.stringify({
-                code: newCode,
-                version: version,
-                changelog: changelog,
-                timestamp: Date.now()
-            }));
-        }
-        
-        // Показываем уведомление
-        const message = `Обновление до версии ${version} готово! Перезагрузите страницу для применения.`;
-        
-        showNotification(message, 'success');
-        
-        // Предложить перезагрузку
-        setTimeout(() => {
-            if (confirm('Обновление загружено! Перезагрузить страницу для применения?')) {
-                window.location.reload();
-            }
-        }, 2000);
-    }
-    
-    // Обновление конфигурации
-    function updateConfiguration(newConfig) {
-        try {
-            // Обновляем настройки столов если есть
-            if (newConfig.tables) {
-                const currentPresets = JSON.parse(localStorage.getItem('wms_user_presets') || '{}');
-                
-                // Добавляем новые столы, не затрагивая пользовательские
-                Object.keys(newConfig.tables).forEach(tableName => {
-                    if (!currentPresets[tableName] || TABLE_PRESETS[tableName]) {
-                        currentPresets[tableName] = newConfig.tables[tableName];
-                    }
-                });
-                
-                localStorage.setItem('wms_user_presets', JSON.stringify(currentPresets));
-                console.log('✅ Конфигурация столов обновлена');
-            }
-            
-            // Обновляем другие настройки
-            if (newConfig.settings) {
-                Object.keys(newConfig.settings).forEach(key => {
-                    if (typeof GM_setValue !== 'undefined') {
-                        GM_setValue(`wms_${key}`, newConfig.settings[key]);
-                    } else {
-                        localStorage.setItem(`wms_${key}`, newConfig.settings[key]);
-                    }
-                });
-                console.log('✅ Настройки обновлены');
-            }
-            
-        } catch (e) {
-            console.error('Ошибка обновления конфигурации:', e);
-        }
-    }
-    
-    // Проверка отложенных обновлений при запуске
-    function checkPendingUpdates() {
-        let pendingUpdate = null;
-        
-        if (typeof GM_getValue !== 'undefined') {
-            const pendingData = GM_getValue('wms_pending_update', null);
-            if (pendingData) {
-                try {
-                    pendingUpdate = JSON.parse(pendingData);
-                } catch (e) {
-                    console.error('Ошибка парсинга отложенного обновления:', e);
-                }
-            }
-        }
-        
-        if (pendingUpdate) {
-            // Удаляем отложенное обновление
-            if (typeof GM_setValue !== 'undefined') {
-                GM_setValue('wms_pending_update', null);
-            }
-            
-            showNotification(`Применено обновление до версии ${pendingUpdate.version}!`, 'success');
-            
-            // Показываем changelog если есть
-            if (pendingUpdate.changelog) {
-                setTimeout(() => {
-                    showChangelogModal(pendingUpdate.version, pendingUpdate.changelog);
-                }, 2000);
-            }
-        }
-    }
-    
-    // Показать changelog
-    function showChangelogModal(version, changelog) {
-        const modal = document.createElement('div');
-        modal.style.cssText = `
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0,0,0,0.5);
-            z-index: 99999;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-family: Arial, sans-serif;
-        `;
-        
-        modal.innerHTML = `
-            <div style="background: white; border-radius: 10px; padding: 25px; max-width: 500px; width: 90%; box-shadow: 0 10px 30px rgba(0,0,0,0.3);">
-                <div style="text-align: center; margin-bottom: 20px;">
-                    <div style="font-size: 20px; font-weight: bold; color: #4CAF50;">
-                        ✅ Обновлено до версии ${version}
-                    </div>
-                </div>
-                
-                <div style="margin-bottom: 20px;">
-                    <div style="font-weight: bold; margin-bottom: 10px; color: #333;">📋 Что нового:</div>
-                    <div style="background: #f5f5f5; padding: 15px; border-radius: 5px; font-size: 14px; max-height: 300px; overflow-y: auto;">
-                        ${changelog.replace(/\n/g, '<br>')}
-                    </div>
-                </div>
-                
-                <div style="text-align: center;">
-                    <button onclick="this.closest('div').parentElement.remove()" style="padding: 10px 20px; background: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 14px;">
-                        👍 Понятно
-                    </button>
-                </div>
-            </div>
-        `;
-        
-        document.body.appendChild(modal);
-        
-        // Автоудаление через 15 секунд
-        setTimeout(() => {
-            if (modal.parentElement) {
-                modal.remove();
-            }
-        }, 15000);
-    }
-    
-    // Инициализация системы обновлений (МИНИМАЛЬНАЯ)
-    function initializeUpdateSystem() {
-        console.log('🔄 Инициализация системы ручных обновлений');
-        
-        // Проверяем отложенные обновления
-        checkPendingUpdates();
-        
-        // БЕЗ автоматических проверок - только по кнопке!
-        console.log(`✅ Ручные обновления настроены (только по кнопке)`);
-    }
 
     // ========== УПРАВЛЕНИЕ НАСТРОЙКАМИ ==========
 
@@ -1409,29 +1064,28 @@
             <!-- Вкладка обновлений -->
             <div id="wms-tab-updates" class="wms-tab-content" style="display: none;">
                 <div class="wms-section">
-                    <div style="font-weight: bold; margin-bottom: 10px;">🔄 Ручные обновления</div>
+                    <div style="font-weight: bold; margin-bottom: 15px; color: #333;">🔄 Обновление скрипта</div>
                     
-                    <div style="margin-bottom: 10px;">
-                        <button id="wms-check-updates" style="width: 100%; padding: 8px; background: #2196F3; color: white; border: none; border-radius: 3px; cursor: pointer;">
-                            🔍 Проверить обновления сейчас
+                    <div style="margin-bottom: 15px;">
+                        <button id="wms-open-update" style="width: 100%; padding: 12px; background: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 14px; font-weight: bold;">
+                            🚀 Обновить скрипт
                         </button>
                     </div>
                     
-                    <div style="margin-bottom: 10px;">
-                        <button onclick="window.open('https://github.com/Pwnzord123/OtgruzkaSPB')" style="width: 100%; padding: 8px; background: #333; color: white; border: none; border-radius: 3px; cursor: pointer;">
-                            📁 Открыть репозиторий GitHub
+                    <div style="margin-bottom: 15px;">
+                        <button onclick="window.open('${UPDATE_CONFIG.GITHUB_REPO}')" style="width: 100%; padding: 8px; background: #333; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 12px;">
+                            📁 GitHub репозиторий
                         </button>
                     </div>
                     
-                    <div style="font-size: 11px; color: #666; line-height: 1.4;">
-                        <strong>Текущая версия:</strong> ${CURRENT_VERSION}<br>
-                        <strong>Сервер:</strong> GitHub<br>
-                        <strong>Режим:</strong> Только по кнопке<br>
-                        <strong>Автообновления:</strong> Отключены ✅<br>
+                    <div style="font-size: 11px; color: #666; line-height: 1.4; margin-bottom: 10px;">
+                        <strong>Версия:</strong> ${CURRENT_VERSION}<br>
+                        <strong>Обновления:</strong> GitHub → Tampermonkey<br>
+                        <strong>Тип:</strong> Ручные (по кнопке)
                     </div>
                     
-                    <div style="margin-top: 10px; padding: 8px; background: #e8f5e8; border-radius: 4px; font-size: 10px; color: #2e7d32;">
-                        ℹ️ Обновления происходят только при нажатии кнопки "Проверить обновления". Автоматических проверок нет.
+                    <div style="padding: 10px; background: #e8f5e8; border-radius: 4px; font-size: 11px; color: #2e7d32;">
+                        ✅ <strong>Как работает:</strong> Кнопка открывает ссылку на GitHub. Tampermonkey автоматически предложит обновление.
                     </div>
                 </div>
             </div>
@@ -1503,9 +1157,9 @@
             }
         });
 
-        // Проверка обновлений
-        document.getElementById('wms-check-updates').addEventListener('click', function() {
-            checkForUpdates(true);
+        // Простая кнопка обновления
+        document.getElementById('wms-open-update').addEventListener('click', function() {
+            openUpdateLink();
         });
 
         // Остальные обработчики...
@@ -1882,7 +1536,7 @@
             // Ctrl+Shift+U - проверить обновления
             if (e.ctrlKey && e.shiftKey && e.code === 'KeyU') {
                 e.preventDefault();
-                checkForUpdates(true);
+                openUpdateLink();
             }
         });
 
@@ -1937,10 +1591,7 @@
 
     // Функция инициализации
     function initialize() {
-        console.log('🚀 WMS Container Override Enhanced v2.7 с ручными обновлениями активирован');
-
-        // Инициализируем систему обновлений (минимальную)
-        initializeUpdateSystem();
+        console.log('🚀 WMS Container Override Enhanced v2.8 с упрощенными обновлениями активирован');
 
         // Внедрить CSS стили
         injectCSS();
@@ -1965,7 +1616,7 @@
             checkAndReplace(true);
         }, 1000);
 
-        showNotification(`WMS Override v${CURRENT_VERSION} с ручными обновлениями активен! Стол: "${currentPreset}" (${Object.keys(getCurrentMappings()).length} направлений)`, 'success');
+        showNotification(`WMS Override v${CURRENT_VERSION} с упрощенными обновлениями активен! Стол: "${currentPreset}" (${Object.keys(getCurrentMappings()).length} направлений)`, 'success');
     }
 
     // Ожидание полной загрузки DOM
@@ -1977,10 +1628,10 @@
 
     // ========== ГЛОБАЛЬНЫЕ ФУНКЦИИ ДЛЯ ТЕСТИРОВАНИЯ ==========
     
-    // Функции для ручного управления обновлениями (для тестирования)
-    window.wmsCheckUpdates = () => checkForUpdates(true);
+    // Функции для ручного управления обновлениями (упрощенные)
+    window.wmsUpdate = () => openUpdateLink();
     window.wmsShowVersion = () => console.log(`WMS Container Override v${CURRENT_VERSION}`);
     
-    console.log('✅ WMS Container Override Enhanced v2.7 с ручными обновлениями загружен');
+    console.log('✅ WMS Container Override Enhanced v2.8 с упрощенными обновлениями загружен');
 
 })();

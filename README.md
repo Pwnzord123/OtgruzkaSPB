@@ -10,9 +10,9 @@
 // @grant        GM_getValue
 // @grant        GM_notification
 // @exclude      https://wms.vseinstrumenti.ru/Report/*
-// @updateURL    https://raw.githubusercontent.com/Pwnzord123/OtgruskaSpb/main/wms-script.user.js
-// @downloadURL  https://raw.githubusercontent.com/Pwnzord123/OtgruskaSpb/main/wms-script.user.js
-// @supportURL   https://github.com/Pwnzord123/OtgruskaSpb
+// @updateURL    https://raw.githubusercontent.com/Pwnzord123/OtgruskaSPB/main/wms-script.user.js
+// @downloadURL  https://raw.githubusercontent.com/Pwnzord123/OtgruskaSPB/main/wms-script.user.js
+// @supportURL   https://github.com/Pwnzord123/OtgruskaSpPB
 // ==/UserScript==
 
 (function() {
@@ -22,10 +22,10 @@
     
     const UPDATE_CONFIG = {
         // URL для проверки версий и настроек
-        VERSION_CHECK_URL: 'https://raw.githubusercontent.com/Pwnzord123/OtgruskaSpb/main/version.json',
+        VERSION_CHECK_URL: 'https://raw.githubusercontent.com/Pwnzord123/OtgruskaSPB/main/version.json',
         
         // URL для загрузки обновлений
-        SCRIPT_UPDATE_URL: 'https://raw.githubusercontent.com/Pwnzord123/OtgruskaSpb/main/wms-script.user.js',
+        SCRIPT_UPDATE_URL: 'https://raw.githubusercontent.com/Pwnzord123/OtgruskaSPB/main/wms-script.user.js',
         
         // Интервал проверки обновлений (в минутах)
         CHECK_INTERVAL: 60,
@@ -1470,7 +1470,7 @@
                     </div>
                     
                     <div style="margin-bottom: 10px;">
-                        <button onclick="window.open('https://github.com/Pwnzord123/OtgruskaSpb')" style="width: 100%; padding: 8px; background: #333; color: white; border: none; border-radius: 3px; cursor: pointer;">
+                        <button onclick="window.open('https://github.com/Pwnzord123/OtgruskaSPB')" style="width: 100%; padding: 8px; background: #333; color: white; border: none; border-radius: 3px; cursor: pointer;">
                             📁 Открыть репозиторий GitHub
                         </button>
                     </div>

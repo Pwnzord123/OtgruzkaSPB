@@ -4,7 +4,7 @@
   "critical": false,
   "forceUpdate": false,
   "releaseDate": "2025-07-14T12:00:00Z",
-  "downloadUrl": "https://raw.githubusercontent.com/Pwnzord123/OtgruskaSpb/main/wms-script.user.js",
+  "downloadUrl": "https://raw.githubusercontent.com/Pwnzord123/OtgruskaSPB/main/wms-script.user.js",
   "config": {
     "tables": {
       "Стол 22 (Тест)": {

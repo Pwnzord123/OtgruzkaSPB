@@ -19,7 +19,7 @@
     'use strict';
 
     // ========== УПРОЩЕННАЯ СИСТЕМА ОБНОВЛЕНИЙ ==========
-    
+
     const UPDATE_CONFIG = {
         // Прямая ссылка для обновления
         DIRECT_UPDATE_URL: 'https://raw.githubusercontent.com/Pwnzord123/OtgruzkaSPB/main/wms-script.user.js',
@@ -34,7 +34,7 @@
         console.log('🔄 Открываем ссылку для обновления...');
         showNotification('Открываем страницу обновления...', 'info');
         window.open(UPDATE_CONFIG.DIRECT_UPDATE_URL, '_blank');
-        
+
         setTimeout(() => {
             showUpdateInstructions();
         }, 500);
@@ -48,7 +48,7 @@
             background: rgba(0,0,0,0.7); z-index: 99999; display: flex;
             align-items: center; justify-content: center; font-family: Arial, sans-serif;
         `;
-        
+
         modal.innerHTML = `
             <div style="background: white; border-radius: 10px; padding: 25px; max-width: 450px; width: 90%; box-shadow: 0 10px 30px rgba(0,0,0,0.3);">
                 <div style="text-align: center; margin-bottom: 20px;">
@@ -56,7 +56,7 @@
                         🚀 Страница обновления открыта
                     </div>
                 </div>
-                
+
                 <div style="margin-bottom: 20px;">
                     <div style="font-weight: bold; margin-bottom: 10px; color: #333;">📋 Следующие шаги:</div>
                     <div style="background: #f5f5f5; padding: 15px; border-radius: 5px; font-size: 13px; line-height: 1.5;">
@@ -66,16 +66,16 @@
                         <div>4️⃣ Перезагрузите эту страницу (<strong>F5</strong>)</div>
                     </div>
                 </div>
-                
+
                 <div style="text-align: center;">
-                    <button onclick="this.closest('div').parentElement.remove()" 
+                    <button onclick="this.closest('div').parentElement.remove()"
                             style="padding: 10px 20px; background: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 14px;">
                         👍 Понятно
                     </button>
                 </div>
             </div>
         `;
-        
+
         document.body.appendChild(modal);
         setTimeout(() => {
             if (modal.parentElement) {
@@ -103,7 +103,7 @@
     // Пресеты для всех столов комплектации (ВСТРОЕННЫЕ ДАННЫЕ) - по буквенным названиям
     const TABLE_PRESETS = {
         "Стол 12": {
-            "Парнас": "23223333333223",
+            "Парнас": "56565656566565656",
             "Международная": "2---Международная",
             "Всеволожск": "3---Всеволожск",
             "Красное": "4---Красное Село",
@@ -894,7 +894,7 @@
             });
             return;
         }
-        
+
         // Fallback к обычным уведомлениям
         const notification = document.createElement('div');
         notification.style.cssText = `
@@ -1065,25 +1065,25 @@
             <div id="wms-tab-updates" class="wms-tab-content" style="display: none;">
                 <div class="wms-section">
                     <div style="font-weight: bold; margin-bottom: 15px; color: #333;">🔄 Обновление скрипта</div>
-                    
+
                     <div style="margin-bottom: 15px;">
                         <button id="wms-open-update" style="width: 100%; padding: 12px; background: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 14px; font-weight: bold;">
                             🚀 Обновить скрипт
                         </button>
                     </div>
-                    
+
                     <div style="margin-bottom: 15px;">
                         <button onclick="window.open('${UPDATE_CONFIG.GITHUB_REPO}')" style="width: 100%; padding: 8px; background: #333; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 12px;">
                             📁 GitHub репозиторий
                         </button>
                     </div>
-                    
+
                     <div style="font-size: 11px; color: #666; line-height: 1.4; margin-bottom: 10px;">
                         <strong>Версия:</strong> ${CURRENT_VERSION}<br>
                         <strong>Обновления:</strong> GitHub → Tampermonkey<br>
                         <strong>Тип:</strong> Ручные (по кнопке)
                     </div>
-                    
+
                     <div style="padding: 10px; background: #e8f5e8; border-radius: 4px; font-size: 11px; color: #2e7d32;">
                         ✅ <strong>Как работает:</strong> Кнопка открывает ссылку на GitHub. Tampermonkey автоматически предложит обновление.
                     </div>
@@ -1627,11 +1627,11 @@
     }
 
     // ========== ГЛОБАЛЬНЫЕ ФУНКЦИИ ДЛЯ ТЕСТИРОВАНИЯ ==========
-    
+
     // Функции для ручного управления обновлениями (упрощенные)
     window.wmsUpdate = () => openUpdateLink();
     window.wmsShowVersion = () => console.log(`WMS Container Override v${CURRENT_VERSION}`);
-    
+
     console.log('✅ WMS Container Override Enhanced v2.8 с упрощенными обновлениями загружен');
 
 })();

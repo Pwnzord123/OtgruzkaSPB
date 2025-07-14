@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         WMS Container Override Enhanced - Auto Update
+// @name         WMS Container Override Enhanced - Manual Updates
 // @namespace    http://tampermonkey.net/
 // @version      2.7
-// @description  Автозамена контейнеров WMS с автообновлениями и пользовательскими столами
+// @description  Автозамена контейнеров WMS с ручными обновлениями через GitHub
 // @author       Жигалов Ю.В.
 // @match        https://wms.vseinstrumenti.ru/*
 // @grant        GM_xmlhttpRequest
@@ -10,9 +10,9 @@
 // @grant        GM_getValue
 // @grant        GM_notification
 // @exclude      https://wms.vseinstrumenti.ru/Report/*
-// @updateURL    https://raw.githubusercontent.com/Pwnzord123/OtgruskaSpb/main/wms-script.user.js
-// @downloadURL  https://raw.githubusercontent.com/Pwnzord123/OtgruskaSpb/main/wms-script.user.js
-// @supportURL   https://github.com/Pwnzord123/OtgruskaSpb
+// @updateURL    https://raw.githubusercontent.com/Pwnzord123/OtgruskaSPB/main/wms-script.user.js
+// @downloadURL  https://raw.githubusercontent.com/Pwnzord123/OtgruskaSPB/main/wms-script.user.js
+// @supportURL   https://github.com/Pwnzord123/OtgruskaSPB
 // ==/UserScript==
 
 (function() {
@@ -22,16 +22,16 @@
     
     const UPDATE_CONFIG = {
         // URL для проверки версий и настроек
-        VERSION_CHECK_URL: 'https://raw.githubusercontent.com/Pwnzord123/OtgruzkaSPB/main/version.json',
+        VERSION_CHECK_URL: 'https://raw.githubusercontent.com/Pwnzord123/OtgruskaSPB/main/version.json',
         
         // URL для загрузки обновлений
-        SCRIPT_UPDATE_URL: 'https://raw.githubusercontent.com/Pwnzord123/OtgruzkaSPB/main/wms-script.user.js',
+        SCRIPT_UPDATE_URL: 'https://raw.githubusercontent.com/Pwnzord123/OtgruskaSPB/main/wms-script.user.js',
         
-        // Интервал проверки обновлений (в минутах)
-        CHECK_INTERVAL: 60,
+        // ОТКЛЮЧЕНЫ автоматические проверки - только по кнопке!
+        CHECK_INTERVAL: 999999, // Очень редко (практически никогда)
         
-        // Автоматически применять минорные обновления
-        AUTO_APPLY_MINOR: true,
+        // ОТКЛЮЧЕНЫ автоматические обновления
+        AUTO_APPLY_MINOR: false,
         
         // Показывать уведомления об обновлениях
         SHOW_NOTIFICATIONS: true
@@ -59,7 +59,7 @@
     // Пресеты для всех столов комплектации (ВСТРОЕННЫЕ ДАННЫЕ) - по буквенным названиям
     const TABLE_PRESETS = {
         "Стол 12": {
-            "Парнас": "1111111111111111111111111111111111111111111111",
+            "Парнас": "1---Парнас",
             "Международная": "2---Международная",
             "Всеволожск": "3---Всеволожск",
             "Красное": "4---Красное Село",
@@ -181,7 +181,7 @@
         lastUpdate: 0
     };
 
-    // ========== СИСТЕМА АВТООБНОВЛЕНИЯ ==========
+    // ========== СИСТЕМА ОБНОВЛЕНИЙ (ТОЛЬКО РУЧНЫЕ) ==========
     
     // Парсинг версии
     function parseVersion(version) {
@@ -211,7 +211,7 @@
         return 'same';
     }
     
-    // Проверка обновлений
+    // Проверка обновлений (ТОЛЬКО ПО КНОПКЕ!)
     function checkForUpdates(manual = false) {
         console.log('🔍 Проверка обновлений...');
         
@@ -221,6 +221,11 @@
                 showNotification('Автообновления недоступны (отсутствуют разрешения)', 'error');
             }
             return;
+        }
+        
+        // Показать, что идет проверка
+        if (manual) {
+            showNotification('Проверяем обновления...', 'info');
         }
         
         GM_xmlhttpRequest({
@@ -268,16 +273,7 @@
         
         console.log(`🆕 Доступна новая версия: ${version} (текущая: ${CURRENT_VERSION})`);
         
-        // Автоматическое обновление для минорных версий
-        if ((comparison === 'minor' || comparison === 'patch') && 
-            UPDATE_CONFIG.AUTO_APPLY_MINOR && !forceUpdate && !critical) {
-            
-            console.log('🚀 Автоматическое обновление...');
-            downloadAndApplyUpdate(version, changelog, true);
-            return;
-        }
-        
-        // Показать уведомление пользователю
+        // ВСЕГДА показываем пользователю (никаких автообновлений)
         showUpdateNotification(version, changelog, critical, forceUpdate);
     }
     
@@ -355,14 +351,9 @@
                     <button id="wms-update-now" style="padding: 12px 24px; background: ${urgencyColor}; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 14px; font-weight: bold;">
                         🚀 Обновить сейчас
                     </button>
-                    ${!critical ? `
-                        <button id="wms-update-later" style="padding: 12px 24px; background: #9E9E9E; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 14px;">
-                            ⏰ Напомнить позже
-                        </button>
-                        <button id="wms-update-skip" style="padding: 12px 24px; background: #607D8B; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 14px;">
-                            ❌ Пропустить
-                        </button>
-                    ` : ''}
+                    <button id="wms-update-close" style="padding: 12px 24px; background: #9E9E9E; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 14px;">
+                        ❌ Не сейчас
+                    </button>
                 </div>
                 
                 ${critical ? `
@@ -381,24 +372,10 @@
             downloadAndApplyUpdate(version, changelog, false);
         });
         
-        if (!critical) {
-            document.getElementById('wms-update-later')?.addEventListener('click', () => {
-                modal.remove();
-                // Отложить на 4 часа
-                if (typeof GM_setValue !== 'undefined') {
-                    GM_setValue('wms_update_remind_time', Date.now() + (4 * 60 * 60 * 1000));
-                }
-                showNotification('Напомним через 4 часа', 'info');
-            });
-            
-            document.getElementById('wms-update-skip')?.addEventListener('click', () => {
-                modal.remove();
-                if (typeof GM_setValue !== 'undefined') {
-                    GM_setValue('wms_skipped_version', version);
-                }
-                showNotification('Обновление пропущено', 'info');
-            });
-        }
+        document.getElementById('wms-update-close').addEventListener('click', () => {
+            modal.remove();
+            showNotification('Обновление отложено', 'info');
+        });
         
         // Закрытие по клику вне модального окна (только для некритических)
         if (!critical) {
@@ -412,9 +389,7 @@
     
     // Загрузка и применение обновления
     function downloadAndApplyUpdate(version, changelog, isAuto) {
-        if (!isAuto) {
-            showNotification('Загрузка обновления...', 'info');
-        }
+        showNotification('Загрузка обновления...', 'info');
         
         GM_xmlhttpRequest({
             method: 'GET',
@@ -455,18 +430,16 @@
         }
         
         // Показываем уведомление
-        const message = isAuto ? 
-            `Автообновление до версии ${version} будет применено при перезагрузке страницы` :
-            `Обновление до версии ${version} готово! Перезагрузите страницу для применения.`;
+        const message = `Обновление до версии ${version} готово! Перезагрузите страницу для применения.`;
         
         showNotification(message, 'success');
         
-        // Для автоматических обновлений можно сразу перезагрузить
-        if (isAuto && UPDATE_CONFIG.AUTO_APPLY_MINOR) {
-            setTimeout(() => {
+        // Предложить перезагрузку
+        setTimeout(() => {
+            if (confirm('Обновление загружено! Перезагрузить страницу для применения?')) {
                 window.location.reload();
-            }, 3000);
-        }
+            }
+        }, 2000);
     }
     
     // Обновление конфигурации
@@ -578,48 +551,23 @@
         
         document.body.appendChild(modal);
         
-        // Автоудаление через 10 секунд
+        // Автоудаление через 15 секунд
         setTimeout(() => {
             if (modal.parentElement) {
                 modal.remove();
             }
-        }, 10000);
+        }, 15000);
     }
     
-    // Инициализация системы обновлений
+    // Инициализация системы обновлений (МИНИМАЛЬНАЯ)
     function initializeUpdateSystem() {
-        console.log('🔄 Инициализация системы автообновлений');
+        console.log('🔄 Инициализация системы ручных обновлений');
         
         // Проверяем отложенные обновления
         checkPendingUpdates();
         
-        // Проверяем, не пора ли напомнить об обновлении
-        if (typeof GM_getValue !== 'undefined') {
-            const remindTime = GM_getValue('wms_update_remind_time', 0);
-            if (remindTime && Date.now() > remindTime) {
-                GM_setValue('wms_update_remind_time', null);
-                setTimeout(() => checkForUpdates(false), 2000);
-            }
-        }
-        
-        // Запускаем периодическую проверку
-        const checkInterval = UPDATE_CONFIG.CHECK_INTERVAL * 60 * 1000; // конвертируем в миллисекунды
-        setInterval(() => {
-            let skippedVersion = '';
-            if (typeof GM_getValue !== 'undefined') {
-                skippedVersion = GM_getValue('wms_skipped_version', '');
-            }
-            if (!skippedVersion || compareVersions(skippedVersion, CURRENT_VERSION) !== 'same') {
-                checkForUpdates(false);
-            }
-        }, checkInterval);
-        
-        // Первоначальная проверка через 10 секунд после загрузки
-        setTimeout(() => {
-            checkForUpdates(false);
-        }, 10000);
-        
-        console.log(`✅ Автообновления настроены (проверка каждые ${UPDATE_CONFIG.CHECK_INTERVAL} мин)`);
+        // БЕЗ автоматических проверок - только по кнопке!
+        console.log(`✅ Ручные обновления настроены (только по кнопке)`);
     }
 
     // ========== УПРАВЛЕНИЕ НАСТРОЙКАМИ ==========
@@ -1356,7 +1304,7 @@
             </div>
 
             <div style="margin-bottom: 15px; font-size: 11px; color: #666;">
-                Автозамена контейнеров + автообновления + пользовательские столы
+                Автозамена контейнеров + ручные обновления + пользовательские столы
             </div>
 
             <!-- Табы -->
@@ -1461,7 +1409,7 @@
             <!-- Вкладка обновлений -->
             <div id="wms-tab-updates" class="wms-tab-content" style="display: none;">
                 <div class="wms-section">
-                    <div style="font-weight: bold; margin-bottom: 10px;">🔄 Автообновления</div>
+                    <div style="font-weight: bold; margin-bottom: 10px;">🔄 Ручные обновления</div>
                     
                     <div style="margin-bottom: 10px;">
                         <button id="wms-check-updates" style="width: 100%; padding: 8px; background: #2196F3; color: white; border: none; border-radius: 3px; cursor: pointer;">
@@ -1470,7 +1418,7 @@
                     </div>
                     
                     <div style="margin-bottom: 10px;">
-                        <button onclick="window.open('https://github.com/Pwnzord123/OtgruskaSpb')" style="width: 100%; padding: 8px; background: #333; color: white; border: none; border-radius: 3px; cursor: pointer;">
+                        <button onclick="window.open('https://github.com/Pwnzord123/OtgruskaSPB')" style="width: 100%; padding: 8px; background: #333; color: white; border: none; border-radius: 3px; cursor: pointer;">
                             📁 Открыть репозиторий GitHub
                         </button>
                     </div>
@@ -1478,8 +1426,12 @@
                     <div style="font-size: 11px; color: #666; line-height: 1.4;">
                         <strong>Текущая версия:</strong> ${CURRENT_VERSION}<br>
                         <strong>Сервер:</strong> GitHub<br>
-                        <strong>Проверка:</strong> каждые ${UPDATE_CONFIG.CHECK_INTERVAL} мин<br>
-                        <strong>Автообновления:</strong> ${UPDATE_CONFIG.AUTO_APPLY_MINOR ? 'Включены' : 'Отключены'}<br>
+                        <strong>Режим:</strong> Только по кнопке<br>
+                        <strong>Автообновления:</strong> Отключены ✅<br>
+                    </div>
+                    
+                    <div style="margin-top: 10px; padding: 8px; background: #e8f5e8; border-radius: 4px; font-size: 10px; color: #2e7d32;">
+                        ℹ️ Обновления происходят только при нажатии кнопки "Проверить обновления". Автоматических проверок нет.
                     </div>
                 </div>
             </div>
@@ -1985,9 +1937,9 @@
 
     // Функция инициализации
     function initialize() {
-        console.log('🚀 WMS Container Override Enhanced v2.7 с автообновлениями активирован');
+        console.log('🚀 WMS Container Override Enhanced v2.7 с ручными обновлениями активирован');
 
-        // Инициализируем систему обновлений
+        // Инициализируем систему обновлений (минимальную)
         initializeUpdateSystem();
 
         // Внедрить CSS стили
@@ -2013,7 +1965,7 @@
             checkAndReplace(true);
         }, 1000);
 
-        showNotification(`WMS Override v${CURRENT_VERSION} с автообновлениями активен! Стол: "${currentPreset}" (${Object.keys(getCurrentMappings()).length} направлений)`, 'success');
+        showNotification(`WMS Override v${CURRENT_VERSION} с ручными обновлениями активен! Стол: "${currentPreset}" (${Object.keys(getCurrentMappings()).length} направлений)`, 'success');
     }
 
     // Ожидание полной загрузки DOM
@@ -2027,9 +1979,8 @@
     
     // Функции для ручного управления обновлениями (для тестирования)
     window.wmsCheckUpdates = () => checkForUpdates(true);
-    window.wmsForceUpdate = (version) => downloadAndApplyUpdate(version || '999.0.0', 'Принудительное обновление для тестирования', false);
     window.wmsShowVersion = () => console.log(`WMS Container Override v${CURRENT_VERSION}`);
     
-    console.log('✅ WMS Container Override Enhanced v2.7 с автообновлениями загружен');
+    console.log('✅ WMS Container Override Enhanced v2.7 с ручными обновлениями загружен');
 
 })();

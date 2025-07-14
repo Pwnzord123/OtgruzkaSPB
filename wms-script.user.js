@@ -22,10 +22,10 @@
     
     const UPDATE_CONFIG = {
         // URL для проверки версий и настроек
-        VERSION_CHECK_URL: 'https://raw.githubusercontent.com/Pwnzord123/OtgruskaSpb/main/version.json',
+        VERSION_CHECK_URL: 'https://raw.githubusercontent.com/Pwnzord123/OtgruzkaSPB/main/version.json',
         
         // URL для загрузки обновлений
-        SCRIPT_UPDATE_URL: 'https://raw.githubusercontent.com/Pwnzord123/OtgruskaSpb/main/wms-script.user.js',
+        SCRIPT_UPDATE_URL: 'https://raw.githubusercontent.com/Pwnzord123/OtgruzkaSPB/main/wms-script.user.js',
         
         // Интервал проверки обновлений (в минутах)
         CHECK_INTERVAL: 60,

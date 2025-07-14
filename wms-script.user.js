@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         WMS Container Override Enhanced - Manual Updates
 // @namespace    http://tampermonkey.net/
-// @version      2.7
+// @version      3.0
 // @description  Автозамена контейнеров WMS с ручными обновлениями через GitHub
 // @author       Жигалов Ю.В.
 // @match        https://wms.vseinstrumenti.ru/*
@@ -38,7 +38,7 @@
     };
 
     // Текущая версия скрипта
-    const CURRENT_VERSION = '2.7';
+    const CURRENT_VERSION = '3.0';
 
     // ========== КОНФИГУРАЦИЯ ==========
 
@@ -59,7 +59,7 @@
     // Пресеты для всех столов комплектации (ВСТРОЕННЫЕ ДАННЫЕ) - по буквенным названиям
     const TABLE_PRESETS = {
         "Стол 12": {
-            "Парнас": "55555555555555555",
+            "Парнас": "989898989989",
             "Международная": "2---Международная",
             "Всеволожск": "3---Всеволожск",
             "Красное": "4---Красное Село",

@@ -27,7 +27,7 @@
     };
 
     // Текущая версия скрипта
-    const CURRENT_VERSION = '2.9';
+    const CURRENT_VERSION = '3.0';
 
     // Простая функция открытия ссылки для обновления
     function openUpdateLink() {

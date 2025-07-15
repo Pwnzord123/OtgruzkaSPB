@@ -9,7 +9,7 @@
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @grant        GM_notification
-// @exclude      https://wms.vseinstrumenti.ru/Report/*
+// @exclude      https://claude.ai/*
 // @updateURL    https://raw.githubusercontent.com/Pwnzord123/OtgruzkaSPB/main/wms-script.user.js
 // @downloadURL  https://raw.githubusercontent.com/Pwnzord123/OtgruzkaSPB/main/wms-script.user.js
 // @supportURL   https://github.com/Pwnzord123/OtgruzkaSPB

@@ -18,136 +18,313 @@
 (function() {
     'use strict';
 
-    // ========== ПРОСТАЯ СИСТЕМА ОБНОВЛЕНИЙ ==========
+    // ========== СИСТЕМА ОБНОВЛЕНИЙ С ПАРСИНГОМ GITHUB ==========
     
     const UPDATE_CONFIG = {
         DIRECT_UPDATE_URL: 'https://raw.githubusercontent.com/Pwnzord123/OtgruzkaSPB/main/wms-script.user.js',
+        GITHUB_HTML_URL: 'https://github.com/Pwnzord123/OtgruzkaSPB/blob/main/wms-script.user.js',
+        GITHUB_API_URL: 'https://api.github.com/repos/Pwnzord123/OtgruzkaSPB/contents/wms-script.user.js',
         GITHUB_REPO: 'https://github.com/Pwnzord123/OtgruzkaSPB'
     };
 
     // Текущая версия скрипта
     const CURRENT_VERSION = '3.0';
 
-    // ИСПРАВЛЕННАЯ функция обновления с правильной обработкой кодировки
+    // Главная функция обновления с несколькими методами
     function updateScript() {
-        console.log('🔄 Обновление скрипта...');
+        console.log('🔄 Обновление скрипта с парсингом GitHub...');
         showNotification('Загружаем актуальную версию с GitHub...', 'info');
         
-        // Получаем актуальный скрипт с GitHub
-        const timestamp = Date.now();
-        const fetchUrl = `${UPDATE_CONFIG.DIRECT_UPDATE_URL}?v=${timestamp}&_=${Math.random()}`;
+        updateWithMultipleMethods();
+    }
+
+    async function updateWithMultipleMethods() {
+        const methods = [
+            { name: 'Raw URL с обходом кэша', func: fetchFromRawURL },
+            { name: 'Парсинг HTML GitHub', func: fetchFromGitHubHTML },
+            { name: 'GitHub API', func: fetchFromGitHubAPI }
+        ];
         
-        fetch(fetchUrl, {
+        for (let i = 0; i < methods.length; i++) {
+            try {
+                console.log(`🔄 Метод ${i + 1}: ${methods[i].name}...`);
+                showNotification(`Пробуем метод ${i + 1}: ${methods[i].name}...`, 'info');
+                
+                const scriptContent = await methods[i].func();
+                
+                if (scriptContent && scriptContent.length > 5000 && scriptContent.includes('WMS Container Override')) {
+                    console.log(`✅ Метод ${i + 1} успешен! Размер: ${scriptContent.length} символов`);
+                    await processAndInstallScript(scriptContent, methods[i].name);
+                    return;
+                } else {
+                    throw new Error('Получен некорректный контент');
+                }
+            } catch (error) {
+                console.warn(`❌ Метод ${i + 1} (${methods[i].name}) неудачен:`, error.message);
+                if (i < methods.length - 1) {
+                    showNotification(`Метод ${i + 1} неудачен, пробуем следующий...`, 'info');
+                    await new Promise(resolve => setTimeout(resolve, 1000)); // Пауза между попытками
+                }
+            }
+        }
+        
+        // Если все методы неудачны
+        console.error('❌ Все методы обновления неудачны');
+        showNotification('Автообновление неудачно. Открываем GitHub...', 'error');
+        setTimeout(() => {
+            window.open(UPDATE_CONFIG.GITHUB_REPO, '_blank');
+            showManualUpdateInstructions();
+        }, 2000);
+    }
+
+    // Метод 1: Raw URL с агрессивным обходом кэша
+    async function fetchFromRawURL() {
+        const timestamp = Date.now();
+        const randomParam = Math.random().toString(36).substring(7);
+        const fetchUrl = `${UPDATE_CONFIG.DIRECT_UPDATE_URL}?v=${timestamp}&_=${randomParam}&nocache=${Date.now()}&bust=${Math.floor(Math.random() * 1000000)}`;
+        
+        const response = await fetch(fetchUrl, {
             method: 'GET',
             headers: {
-                'Cache-Control': 'no-cache',
-                'Pragma': 'no-cache'
+                'Cache-Control': 'no-cache, no-store, must-revalidate',
+                'Pragma': 'no-cache',
+                'Expires': '0',
+                'If-None-Match': '*',
+                'If-Modified-Since': 'Thu, 01 Jan 1970 00:00:00 GMT'
+            },
+            cache: 'no-store'
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const buffer = await response.arrayBuffer();
+        const decoder = new TextDecoder('utf-8');
+        return decoder.decode(buffer);
+    }
+
+    // Метод 2: Парсинг HTML страницы GitHub
+    async function fetchFromGitHubHTML() {
+        const timestamp = Date.now();
+        const randomParam = Math.random().toString(36).substring(7);
+        const fetchUrl = `${UPDATE_CONFIG.GITHUB_HTML_URL}?v=${timestamp}&_=${randomParam}&t=${Date.now()}`;
+        
+        const response = await fetch(fetchUrl, {
+            method: 'GET',
+            headers: {
+                'Cache-Control': 'no-cache, no-store, must-revalidate',
+                'Pragma': 'no-cache',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            },
+            cache: 'no-store'
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const html = await response.text();
+        return extractScriptFromGitHubHTML(html);
+    }
+
+    // Извлечение кода из HTML GitHub
+    function extractScriptFromGitHubHTML(html) {
+        try {
+            // GitHub может использовать разные структуры, пробуем несколько вариантов
+            
+            // Вариант 1: Ищем в <table class="highlight">
+            let tableMatch = html.match(/<table[^>]*class="[^"]*highlight[^"]*"[^>]*>(.*?)<\/table>/s);
+            
+            // Вариант 2: Ищем просто по blob-code
+            if (!tableMatch) {
+                tableMatch = html.match(/<div[^>]*class="[^"]*highlight[^"]*"[^>]*>(.*?)<\/div>/s);
             }
-        })
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error(`Ошибка загрузки: ${response.status}`);
-                }
-                // ВАЖНО: Используем ArrayBuffer для правильной обработки кодировки
-                return response.arrayBuffer();
-            })
-            .then(buffer => {
-                // Декодируем ArrayBuffer в текст с явным указанием UTF-8
-                const decoder = new TextDecoder('utf-8');
-                const scriptContent = decoder.decode(buffer);
-                
-                // Проверяем, что контент загрузился корректно
-                if (!scriptContent || scriptContent.length < 1000) {
-                    throw new Error('Некорректный или пустой скрипт');
-                }
-                
-                // Модифицируем версию чтобы Tampermonkey точно обновил
-                const modifiedScript = forceUpdateVersion(scriptContent);
-                
-                // Создаем blob с явным указанием кодировки UTF-8
-                const blob = new Blob([modifiedScript], { 
-                    type: 'text/javascript; charset=utf-8' 
-                });
-                const blobUrl = URL.createObjectURL(blob);
-                
-                // Автоматически открываем для установки
-                window.open(blobUrl, '_blank');
-                
-                console.log('✅ Скрипт загружен и готов к установке');
-                showNotification('Скрипт готов! Нажмите "Установить" в новой вкладке', 'success');
-                
-                // Показываем простые инструкции
-                setTimeout(() => {
-                    showSimpleInstructions();
-                }, 1000);
-                
-                // Удаляем blob через минуту
-                setTimeout(() => {
-                    URL.revokeObjectURL(blobUrl);
-                }, 60000);
-            })
-            .catch(error => {
-                console.error('❌ Ошибка обновления:', error);
-                showNotification(`Ошибка обновления: ${error.message}`, 'error');
-                
-                // Fallback - открываем GitHub напрямую
-                setTimeout(() => {
-                    showNotification('Открываем GitHub для ручного обновления...', 'info');
-                    window.open(UPDATE_CONFIG.DIRECT_UPDATE_URL, '_blank');
-                }, 2000);
+            
+            if (!tableMatch) {
+                throw new Error('Не найден контейнер с кодом');
+            }
+            
+            const content = tableMatch[1];
+            
+            // Извлекаем строки кода
+            const linePattern = /<td[^>]*class="[^"]*blob-code[^"]*"[^>]*>(.*?)<\/td>/gs;
+            const lineMatches = [...content.matchAll(linePattern)];
+            
+            if (lineMatches.length === 0) {
+                throw new Error('Не найдены строки кода');
+            }
+            
+            let scriptLines = [];
+            for (const match of lineMatches) {
+                let line = match[1];
+                // Убираем HTML теги
+                line = line.replace(/<[^>]*>/g, '');
+                // Декодируем HTML сущности
+                line = decodeHTMLEntities(line);
+                scriptLines.push(line);
+            }
+            
+            const scriptContent = scriptLines.join('\n');
+            
+            // Проверяем валидность
+            if (!scriptContent.includes('==UserScript==') || !scriptContent.includes('WMS Container Override')) {
+                throw new Error('Извлеченный контент не является нашим скриптом');
+            }
+            
+            console.log('✅ Код успешно извлечен из HTML GitHub');
+            return scriptContent;
+            
+        } catch (error) {
+            throw new Error(`Ошибка парсинга HTML: ${error.message}`);
+        }
+    }
+
+    // Декодирование HTML сущностей
+    function decodeHTMLEntities(text) {
+        const entities = {
+            '&amp;': '&',
+            '&lt;': '<',
+            '&gt;': '>',
+            '&quot;': '"',
+            '&#x27;': "'",
+            '&#x2F;': '/',
+            '&#39;': "'",
+            '&nbsp;': ' ',
+            '&#x60;': '`'
+        };
+        
+        return text.replace(/&[#\w]+;/g, function(entity) {
+            return entities[entity] || entity;
+        });
+    }
+
+    // Метод 3: GitHub API
+    async function fetchFromGitHubAPI() {
+        const timestamp = Date.now();
+        const randomParam = Math.random().toString(36).substring(7);
+        const fetchUrl = `${UPDATE_CONFIG.GITHUB_API_URL}?v=${timestamp}&_=${randomParam}`;
+        
+        const response = await fetch(fetchUrl, {
+            method: 'GET',
+            headers: {
+                'Accept': 'application/vnd.github.v3+json',
+                'Cache-Control': 'no-cache',
+                'User-Agent': 'WMS-Script-Updater/1.0'
+            },
+            cache: 'no-store'
+        });
+        
+        if (!response.ok) {
+            throw new Error(`GitHub API error: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        if (!data.content || data.encoding !== 'base64') {
+            throw new Error('Неверный формат ответа GitHub API');
+        }
+        
+        // Декодируем base64
+        const binaryString = atob(data.content.replace(/\s/g, ''));
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+        }
+        
+        const decoder = new TextDecoder('utf-8');
+        const scriptContent = decoder.decode(bytes);
+        
+        console.log('✅ Код получен через GitHub API');
+        return scriptContent;
+    }
+
+    // Обработка и установка скрипта
+    async function processAndInstallScript(scriptContent, methodName) {
+        try {
+            console.log(`✅ Скрипт загружен через: ${methodName}`);
+            console.log(`📊 Размер скрипта: ${scriptContent.length} символов`);
+            
+            // Модифицируем версию
+            const modifiedScript = forceUpdateVersion(scriptContent, methodName);
+            
+            // Создаем blob с правильной кодировкой
+            const blob = new Blob([modifiedScript], { 
+                type: 'text/javascript; charset=utf-8' 
             });
+            const blobUrl = URL.createObjectURL(blob);
+            
+            // Открываем для установки
+            window.open(blobUrl, '_blank');
+            
+            console.log('✅ Скрипт готов к установке');
+            showNotification(`Скрипт загружен через ${methodName}! Нажмите "Установить" в новой вкладке`, 'success');
+            
+            // Показываем инструкции
+            setTimeout(() => {
+                showSimpleInstructions();
+            }, 1000);
+            
+            // Удаляем blob через минуту
+            setTimeout(() => {
+                URL.revokeObjectURL(blobUrl);
+            }, 60000);
+            
+        } catch (error) {
+            throw new Error(`Ошибка обработки скрипта: ${error.message}`);
+        }
     }
 
     // Улучшенная функция модификации версии
-    function forceUpdateVersion(scriptContent) {
-        // Проверяем, что контент корректно загрузился
-        if (!scriptContent || typeof scriptContent !== 'string') {
-            throw new Error('Некорректный контент скрипта');
-        }
-        
-        // Создаем уникальную версию на основе времени
-        const timestamp = Date.now();
-        const newVersion = `3.0.${timestamp}`;
-        
-        let modified = scriptContent;
-        
-        // Заменяем @version (более надежный паттерн)
-        modified = modified.replace(
-            /@version\s+[\d.]+/g, 
-            `@version      ${newVersion}`
-        );
-        
-        // Заменяем CURRENT_VERSION (более надежный паттерн)
-        modified = modified.replace(
-            /const\s+CURRENT_VERSION\s*=\s*['"`][\d.]+['"`]/g,
-            `const CURRENT_VERSION = '${newVersion}'`
-        );
-        
-        // Добавляем комментарий об автообновлении в правильной кодировке
-        const currentDate = new Date().toLocaleString('ru-RU', {
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit'
-        });
-        
-        const updateComment = `
+    function forceUpdateVersion(scriptContent, methodName = 'неизвестно') {
+        try {
+            const timestamp = Date.now();
+            const newVersion = `3.0.${timestamp}`;
+            
+            let modified = scriptContent;
+            
+            // Заменяем @version
+            modified = modified.replace(
+                /@version\s+[\d.]+/g, 
+                `@version      ${newVersion}`
+            );
+            
+            // Заменяем CURRENT_VERSION
+            modified = modified.replace(
+                /const\s+CURRENT_VERSION\s*=\s*['"`][\d.]+['"`]/g,
+                `const CURRENT_VERSION = '${newVersion}'`
+            );
+            
+            // Добавляем комментарий об обновлении
+            const currentDate = new Date().toLocaleString('ru-RU', {
+                year: 'numeric',
+                month: '2-digit', 
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+            
+            const updateComment = `
 // ========== АВТООБНОВЛЕНИЕ ${currentDate} ==========
 // Скрипт автоматически обновлен до версии ${newVersion}
-// Источник: ${UPDATE_CONFIG.DIRECT_UPDATE_URL}
+// Метод загрузки: ${methodName}
+// Источник: GitHub (с обходом кэширования)
 // ================================================================
 
 `;
-        
-        const headerEnd = modified.indexOf('==/UserScript==') + '==/UserScript=='.length;
-        if (headerEnd > 0) {
-            modified = modified.substring(0, headerEnd) + '\n' + updateComment + modified.substring(headerEnd);
+            
+            const headerEnd = modified.indexOf('==/UserScript==') + '==/UserScript=='.length;
+            if (headerEnd > 0) {
+                modified = modified.substring(0, headerEnd) + '\n' + updateComment + modified.substring(headerEnd);
+            }
+            
+            console.log(`📝 Версия изменена на: ${newVersion}`);
+            return modified;
+            
+        } catch (error) {
+            throw new Error(`Ошибка модификации версии: ${error.message}`);
         }
-        
-        console.log(`📝 Версия изменена на: ${newVersion}`);
-        return modified;
     }
 
     // Простые инструкции для пользователя
@@ -193,6 +370,51 @@
         }, 20000);
     }
 
+    // Инструкции для ручного обновления
+    function showManualUpdateInstructions() {
+        const modal = document.createElement('div');
+        modal.style.cssText = `
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8); z-index: 99999; display: flex;
+            align-items: center; justify-content: center; font-family: Arial, sans-serif;
+        `;
+        
+        modal.innerHTML = `
+            <div style="background: white; border-radius: 10px; padding: 30px; max-width: 450px; width: 90%; box-shadow: 0 10px 30px rgba(0,0,0,0.3); text-align: center;">
+                <div style="font-size: 20px; font-weight: bold; color: #FF9800; margin-bottom: 15px;">
+                    📥 Ручное обновление
+                </div>
+                
+                <div style="margin-bottom: 20px; font-size: 14px; color: #333; line-height: 1.5;">
+                    Автообновление не сработало. В открывшейся вкладке GitHub:
+                </div>
+                
+                <div style="margin-bottom: 20px; padding: 15px; background: #fff3e0; border-radius: 5px; font-size: 13px; color: #e65100; text-align: left;">
+                    <strong>Шаги:</strong><br>
+                    1️⃣ Найдите кнопку "Raw" справа сверху<br>
+                    2️⃣ Нажмите на неё<br>
+                    3️⃣ Выделите весь код (Ctrl+A)<br>
+                    4️⃣ Скопируйте (Ctrl+C)<br>
+                    5️⃣ Замените код в Tampermonkey<br>
+                    6️⃣ Сохраните (Ctrl+S)
+                </div>
+                
+                <button onclick="this.closest('div').parentElement.remove()" 
+                        style="padding: 12px 24px; background: #FF9800; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 14px; font-weight: bold;">
+                    👍 Понятно
+                </button>
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+        
+        setTimeout(() => {
+            if (modal.parentElement) {
+                modal.remove();
+            }
+        }, 30000);
+    }
+
     // ========== КОНФИГУРАЦИЯ ==========
 
     // XPath пути к элементам
@@ -212,7 +434,7 @@
     // Пресеты для всех столов комплектации (ВСТРОЕННЫЕ ДАННЫЕ) - по буквенным названиям
     const TABLE_PRESETS = {
         "Стол 12": {
-            "Парнас": "9999999999",
+            "Парнас": "2222222222222222222",
             "Международная": "2---Международная",
             "Всеволожск": "3---Всеволожск",
             "Красное": "4---Красное Село",
@@ -1068,7 +1290,7 @@
             </div>
 
             <div style="margin-bottom: 15px; font-size: 11px; color: #666;">
-                Автозамена контейнеров + простое обновление + пользовательские столы
+                Автозамена контейнеров + парсинг GitHub + пользовательские столы
             </div>
 
             <!-- Табы -->
@@ -1185,13 +1407,13 @@
                     
                     <div style="font-size: 11px; color: #666; line-height: 1.4; margin-bottom: 15px; text-align: center;">
                         <strong>Текущая версия:</strong> ${CURRENT_VERSION}<br>
-                        <strong>Источник:</strong> GitHub<br>
-                        <strong>Метод:</strong> Автоматический с исправленной кодировкой
+                        <strong>Метод:</strong> Парсинг GitHub с обходом кэша<br>
+                        <strong>Методы:</strong> Raw URL → HTML парсинг → GitHub API
                     </div>
                     
                     <div style="padding: 12px; background: #e8f5e8; border-radius: 5px; font-size: 11px; color: #2e7d32; text-align: center;">
-                        ✅ <strong>Исправленное обновление:</strong><br>
-                        Правильная обработка кодировки UTF-8 для корректного отображения кириллицы.
+                        ✅ <strong>Умное обновление:</strong><br>
+                        3 метода обхода кэширования GitHub для гарантированного получения актуальной версии.
                     </div>
                     
                     <div style="margin-top: 15px; text-align: center;">
@@ -1723,7 +1945,7 @@
 
     // Функция инициализации
     function initialize() {
-        console.log('🚀 WMS Container Override Enhanced v3.0 с исправленным обновлением активирован');
+        console.log('🚀 WMS Container Override Enhanced v3.0 с парсингом GitHub активирован');
 
         // Внедрить CSS стили
         injectCSS();
@@ -1762,6 +1984,80 @@
         setTimeout(initialize, 150);
     }
 
+    // ========== ДОПОЛНИТЕЛЬНЫЕ ФУНКЦИИ ДЛЯ ОТЛАДКИ ==========
+    
+    // Принудительное обновление с очисткой кэша
+    window.wmsForceUpdate = async function() {
+        console.log('🔧 Принудительное обновление с очисткой кэша...');
+        
+        // Очищаем кэш браузера
+        if ('caches' in window) {
+            try {
+                const cacheNames = await caches.keys();
+                for (const cacheName of cacheNames) {
+                    await caches.delete(cacheName);
+                }
+                console.log('🗑️ Кэш браузера очищен');
+            } catch (e) {
+                console.log('⚠️ Не удалось очистить кэш браузера');
+            }
+        }
+        
+        // Запускаем обновление
+        updateScript();
+    };
+
+    // Проверка версии на GitHub
+    window.wmsCheckVersion = async function() {
+        try {
+            console.log('🔍 Проверка актуальной версии на GitHub...');
+            showNotification('Проверяем версию на GitHub...', 'info');
+            
+            let githubVersion = 'неизвестно';
+            
+            // Пробуем получить версию через разные методы
+            try {
+                const scriptContent = await fetchFromRawURL();
+                const versionMatch = scriptContent.match(/@version\s+([\d.]+)/);
+                if (versionMatch) githubVersion = versionMatch[1];
+            } catch (e) {
+                try {
+                    const scriptContent = await fetchFromGitHubHTML();
+                    const versionMatch = scriptContent.match(/@version\s+([\d.]+)/);
+                    if (versionMatch) githubVersion = versionMatch[1];
+                } catch (e2) {
+                    console.warn('Не удалось получить версию с GitHub');
+                }
+            }
+            
+            console.log(`📋 Текущая версия: ${CURRENT_VERSION}`);
+            console.log(`📋 Версия на GitHub: ${githubVersion}`);
+            
+            if (githubVersion !== 'неизвестно') {
+                const currentBase = CURRENT_VERSION.split('.')[0] + '.' + CURRENT_VERSION.split('.')[1];
+                const githubBase = githubVersion.split('.')[0] + '.' + githubVersion.split('.')[1];
+                
+                if (githubBase !== currentBase) {
+                    console.log('🆕 Доступна новая версия!');
+                    showNotification(`Доступна новая версия: ${githubVersion}`, 'success');
+                    return true;
+                } else {
+                    console.log('✅ У вас актуальная версия');
+                    showNotification('У вас актуальная версия', 'success');
+                    return false;
+                }
+            } else {
+                showNotification('Не удалось проверить версию', 'error');
+                return null;
+            }
+            
+        } catch (error) {
+            console.error('❌ Ошибка проверки версии:', error);
+            showNotification('Ошибка проверки версии', 'error');
+            return null;
+        }
+    };
+
     // ========== ГЛОБАЛЬНЫЕ ФУНКЦИИ ==========
     
     // Упрощенные глобальные функции
@@ -1773,7 +2069,8 @@
         console.log('Пресеты обновлены!');
     };
 
-    console.log('✅ WMS Container Override Enhanced v3.0 с исправленным обновлением загружен');
+    console.log('✅ WMS Container Override Enhanced v3.0 с парсингом GitHub загружен');
     console.log('🔧 Команды: wmsUpdate(), wmsShowVersion(), wmsForceUpdatePresets()');
+    console.log('🔧 Отладка: wmsForceUpdate(), wmsCheckVersion()');
 
 })();

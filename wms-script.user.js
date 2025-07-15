@@ -28,7 +28,7 @@
     // Текущая версия скрипта
     const CURRENT_VERSION = '3.0';
 
-    // Единственная функция обновления - простая и надежная
+    // ИСПРАВЛЕННАЯ функция обновления с правильной обработкой кодировки
     function updateScript() {
         console.log('🔄 Обновление скрипта...');
         showNotification('Загружаем актуальную версию с GitHub...', 'info');
@@ -37,19 +37,37 @@
         const timestamp = Date.now();
         const fetchUrl = `${UPDATE_CONFIG.DIRECT_UPDATE_URL}?v=${timestamp}&_=${Math.random()}`;
         
-        fetch(fetchUrl)
+        fetch(fetchUrl, {
+            method: 'GET',
+            headers: {
+                'Cache-Control': 'no-cache',
+                'Pragma': 'no-cache'
+            }
+        })
             .then(response => {
                 if (!response.ok) {
                     throw new Error(`Ошибка загрузки: ${response.status}`);
                 }
-                return response.text();
+                // ВАЖНО: Используем ArrayBuffer для правильной обработки кодировки
+                return response.arrayBuffer();
             })
-            .then(scriptContent => {
+            .then(buffer => {
+                // Декодируем ArrayBuffer в текст с явным указанием UTF-8
+                const decoder = new TextDecoder('utf-8');
+                const scriptContent = decoder.decode(buffer);
+                
+                // Проверяем, что контент загрузился корректно
+                if (!scriptContent || scriptContent.length < 1000) {
+                    throw new Error('Некорректный или пустой скрипт');
+                }
+                
                 // Модифицируем версию чтобы Tampermonkey точно обновил
                 const modifiedScript = forceUpdateVersion(scriptContent);
                 
-                // Создаем blob для установки
-                const blob = new Blob([modifiedScript], { type: 'text/javascript' });
+                // Создаем blob с явным указанием кодировки UTF-8
+                const blob = new Blob([modifiedScript], { 
+                    type: 'text/javascript; charset=utf-8' 
+                });
                 const blobUrl = URL.createObjectURL(blob);
                 
                 // Автоматически открываем для установки
@@ -70,33 +88,53 @@
             })
             .catch(error => {
                 console.error('❌ Ошибка обновления:', error);
-                showNotification('Ошибка обновления. Проверьте интернет-соединение.', 'error');
+                showNotification(`Ошибка обновления: ${error.message}`, 'error');
+                
+                // Fallback - открываем GitHub напрямую
+                setTimeout(() => {
+                    showNotification('Открываем GitHub для ручного обновления...', 'info');
+                    window.open(UPDATE_CONFIG.DIRECT_UPDATE_URL, '_blank');
+                }, 2000);
             });
     }
 
-    // Модифицирует версию для принудительного обновления
+    // Улучшенная функция модификации версии
     function forceUpdateVersion(scriptContent) {
+        // Проверяем, что контент корректно загрузился
+        if (!scriptContent || typeof scriptContent !== 'string') {
+            throw new Error('Некорректный контент скрипта');
+        }
+        
         // Создаем уникальную версию на основе времени
         const timestamp = Date.now();
         const newVersion = `3.0.${timestamp}`;
         
         let modified = scriptContent;
         
-        // Заменяем @version
+        // Заменяем @version (более надежный паттерн)
         modified = modified.replace(
             /@version\s+[\d.]+/g, 
             `@version      ${newVersion}`
         );
         
-        // Заменяем CURRENT_VERSION
+        // Заменяем CURRENT_VERSION (более надежный паттерн)
         modified = modified.replace(
             /const\s+CURRENT_VERSION\s*=\s*['"`][\d.]+['"`]/g,
             `const CURRENT_VERSION = '${newVersion}'`
         );
         
-        // Добавляем комментарий об автообновлении
+        // Добавляем комментарий об автообновлении в правильной кодировке
+        const currentDate = new Date().toLocaleString('ru-RU', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
+        });
+        
         const updateComment = `
-// ========== АВТООБНОВЛЕНИЕ ${new Date().toLocaleString()} ==========
+// ========== АВТООБНОВЛЕНИЕ ${currentDate} ==========
 // Скрипт автоматически обновлен до версии ${newVersion}
 // Источник: ${UPDATE_CONFIG.DIRECT_UPDATE_URL}
 // ================================================================
@@ -104,7 +142,9 @@
 `;
         
         const headerEnd = modified.indexOf('==/UserScript==') + '==/UserScript=='.length;
-        modified = modified.substring(0, headerEnd) + '\n' + updateComment + modified.substring(headerEnd);
+        if (headerEnd > 0) {
+            modified = modified.substring(0, headerEnd) + '\n' + updateComment + modified.substring(headerEnd);
+        }
         
         console.log(`📝 Версия изменена на: ${newVersion}`);
         return modified;
@@ -172,7 +212,7 @@
     // Пресеты для всех столов комплектации (ВСТРОЕННЫЕ ДАННЫЕ) - по буквенным названиям
     const TABLE_PRESETS = {
         "Стол 12": {
-            "Парнас": "555555555555555555",
+            "Парнас": "56566666666",
             "Международная": "2---Международная",
             "Всеволожск": "3---Всеволожск",
             "Красное": "4---Красное Село",
@@ -1130,7 +1170,7 @@
                 </div>
             </div>
 
-            <!-- Вкладка обновлений - УПРОЩЕННАЯ -->
+            <!-- Вкладка обновлений -->
             <div id="wms-tab-updates" class="wms-tab-content" style="display: none;">
                 <div class="wms-section">
                     <div style="font-weight: bold; margin-bottom: 20px; color: #333; text-align: center;">
@@ -1146,12 +1186,12 @@
                     <div style="font-size: 11px; color: #666; line-height: 1.4; margin-bottom: 15px; text-align: center;">
                         <strong>Текущая версия:</strong> ${CURRENT_VERSION}<br>
                         <strong>Источник:</strong> GitHub<br>
-                        <strong>Метод:</strong> Автоматический
+                        <strong>Метод:</strong> Автоматический с исправленной кодировкой
                     </div>
                     
                     <div style="padding: 12px; background: #e8f5e8; border-radius: 5px; font-size: 11px; color: #2e7d32; text-align: center;">
-                        ✅ <strong>Простое обновление:</strong><br>
-                        Кнопка автоматически загружает актуальную версию с GitHub и открывает её для установки в Tampermonkey.
+                        ✅ <strong>Исправленное обновление:</strong><br>
+                        Правильная обработка кодировки UTF-8 для корректного отображения кириллицы.
                     </div>
                     
                     <div style="margin-top: 15px; text-align: center;">
@@ -1238,7 +1278,7 @@
             }
         });
 
-        // ЕДИНСТВЕННАЯ КНОПКА ОБНОВЛЕНИЯ
+        // КНОПКА ОБНОВЛЕНИЯ СКРИПТА
         document.getElementById('wms-update-script').addEventListener('click', function() {
             updateScript();
         });
@@ -1683,7 +1723,7 @@
 
     // Функция инициализации
     function initialize() {
-        console.log('🚀 WMS Container Override Enhanced v3.0 с простым обновлением активирован');
+        console.log('🚀 WMS Container Override Enhanced v3.0 с исправленным обновлением активирован');
 
         // Внедрить CSS стили
         injectCSS();
@@ -1733,7 +1773,7 @@
         console.log('Пресеты обновлены!');
     };
 
-    console.log('✅ WMS Container Override Enhanced v3.0 с простым обновлением загружен');
+    console.log('✅ WMS Container Override Enhanced v3.0 с исправленным обновлением загружен');
     console.log('🔧 Команды: wmsUpdate(), wmsShowVersion(), wmsForceUpdatePresets()');
 
 })();

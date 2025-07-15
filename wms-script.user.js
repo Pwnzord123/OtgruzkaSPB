@@ -4,7 +4,7 @@
 // @version      4.0
 // @description  Автозамена контейнеров WMS с полной функциональностью + GitHub API обновления
 // @author       Жигалов Ю.В.
-// @match        https://wms.vseinstrumenti.ru/*
+// @match        https://claude.ai/*
 // @grant        GM_xmlhttpRequest
 // @grant        GM_setValue
 // @grant        GM_getValue

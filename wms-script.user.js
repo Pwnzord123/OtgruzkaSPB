@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         WMS Container Override Enhanced - Force Updates
+// @name         WMS Container Override Enhanced - Simple Updates
 // @namespace    http://tampermonkey.net/
-// @version      2.9
-// @description  Автозамена контейнеров WMS с принудительными обновлениями через GitHub
+// @version      3.0
+// @description  Автозамена контейнеров WMS с простым обновлением через GitHub
 // @author       Жигалов Ю.В.
 // @match        https://wms.vseinstrumenti.ru/*
 // @grant        GM_xmlhttpRequest
@@ -18,143 +18,100 @@
 (function() {
     'use strict';
 
-    // ========== ПРИНУДИТЕЛЬНАЯ СИСТЕМА ОБНОВЛЕНИЙ ==========
+    // ========== ПРОСТАЯ СИСТЕМА ОБНОВЛЕНИЙ ==========
     
     const UPDATE_CONFIG = {
-        // Прямая ссылка для обновления
         DIRECT_UPDATE_URL: 'https://raw.githubusercontent.com/Pwnzord123/OtgruzkaSPB/main/wms-script.user.js',
         GITHUB_REPO: 'https://github.com/Pwnzord123/OtgruzkaSPB'
     };
 
     // Текущая версия скрипта
-    const CURRENT_VERSION = '2.9';
+    const CURRENT_VERSION = '3.0';
 
-    // Функция принудительного обновления (создает модифицированную версию скрипта)
-    function openForceUpdateLink() {
-        console.log('🔄 Запуск принудительного обновления...');
-        showNotification('Загружаем актуальную версию скрипта...', 'info');
+    // Единственная функция обновления - простая и надежная
+    function updateScript() {
+        console.log('🔄 Обновление скрипта...');
+        showNotification('Загружаем актуальную версию с GitHub...', 'info');
         
-        // Добавляем антикэш параметры
+        // Получаем актуальный скрипт с GitHub
         const timestamp = Date.now();
         const fetchUrl = `${UPDATE_CONFIG.DIRECT_UPDATE_URL}?v=${timestamp}&_=${Math.random()}`;
         
-        // Загружаем скрипт и модифицируем его
         fetch(fetchUrl)
             .then(response => {
                 if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}`);
+                    throw new Error(`Ошибка загрузки: ${response.status}`);
                 }
                 return response.text();
             })
             .then(scriptContent => {
-                // Модифицируем версию чтобы принудить обновление
-                const modifiedScript = createForceUpdateScript(scriptContent);
+                // Модифицируем версию чтобы Tampermonkey точно обновил
+                const modifiedScript = forceUpdateVersion(scriptContent);
                 
-                // Создаем blob URL с модифицированным скриптом
+                // Создаем blob для установки
                 const blob = new Blob([modifiedScript], { type: 'text/javascript' });
                 const blobUrl = URL.createObjectURL(blob);
                 
-                console.log('✅ Скрипт загружен и модифицирован');
-                console.log('🚀 Открываем модифицированную версию...');
-                
-                // Открываем модифицированную версию
+                // Автоматически открываем для установки
                 window.open(blobUrl, '_blank');
                 
-                // Показываем инструкции
-                setTimeout(() => {
-                    showForceUpdateInstructions();
-                }, 500);
+                console.log('✅ Скрипт загружен и готов к установке');
+                showNotification('Скрипт готов! Нажмите "Установить" в новой вкладке', 'success');
                 
-                // Удаляем blob URL через минуту
+                // Показываем простые инструкции
+                setTimeout(() => {
+                    showSimpleInstructions();
+                }, 1000);
+                
+                // Удаляем blob через минуту
                 setTimeout(() => {
                     URL.revokeObjectURL(blobUrl);
                 }, 60000);
             })
             .catch(error => {
-                console.error('❌ Ошибка загрузки скрипта:', error);
-                showNotification('Ошибка загрузки скрипта. Попробуйте скачивание файла.', 'error');
-                
-                // Fallback - создаем файл для скачивания
-                createTemporaryUpdateFile();
+                console.error('❌ Ошибка обновления:', error);
+                showNotification('Ошибка обновления. Проверьте интернет-соединение.', 'error');
             });
     }
 
-    // Создать модифицированную версию скрипта для принудительного обновления
-    function createForceUpdateScript(originalScript) {
-        // Увеличиваем версию принудительно
-        const currentTime = Date.now();
-        const forceVersion = `2.9.${currentTime}`;
+    // Модифицирует версию для принудительного обновления
+    function forceUpdateVersion(scriptContent) {
+        // Создаем уникальную версию на основе времени
+        const timestamp = Date.now();
+        const newVersion = `3.0.${timestamp}`;
         
-        let modifiedScript = originalScript;
+        let modified = scriptContent;
         
         // Заменяем @version
-        modifiedScript = modifiedScript.replace(
+        modified = modified.replace(
             /@version\s+[\d.]+/g, 
-            `@version      ${forceVersion}`
+            `@version      ${newVersion}`
         );
         
         // Заменяем CURRENT_VERSION
-        modifiedScript = modifiedScript.replace(
+        modified = modified.replace(
             /const\s+CURRENT_VERSION\s*=\s*['"`][\d.]+['"`]/g,
-            `const CURRENT_VERSION = '${forceVersion}'`
+            `const CURRENT_VERSION = '${newVersion}'`
         );
         
-        // Добавляем комментарий о принудительном обновлении
-        const forceUpdateComment = `
-// ========== ПРИНУДИТЕЛЬНОЕ ОБНОВЛЕНИЕ ${new Date().toLocaleString()} ==========
-// Этот скрипт был автоматически модифицирован для принудительного обновления
-// Оригинальная версия: ${originalScript.match(/@version\s+([\d.]+)/)?.[1] || 'неизвестно'}
-// Принудительная версия: ${forceVersion}
-// ============================================================================
+        // Добавляем комментарий об автообновлении
+        const updateComment = `
+// ========== АВТООБНОВЛЕНИЕ ${new Date().toLocaleString()} ==========
+// Скрипт автоматически обновлен до версии ${newVersion}
+// Источник: ${UPDATE_CONFIG.DIRECT_UPDATE_URL}
+// ================================================================
 
 `;
         
-        // Вставляем комментарий после заголовка
-        const headerEndIndex = modifiedScript.indexOf('==/UserScript==') + '==/UserScript=='.length;
-        modifiedScript = modifiedScript.substring(0, headerEndIndex) + 
-                        '\n' + forceUpdateComment + 
-                        modifiedScript.substring(headerEndIndex);
+        const headerEnd = modified.indexOf('==/UserScript==') + '==/UserScript=='.length;
+        modified = modified.substring(0, headerEnd) + '\n' + updateComment + modified.substring(headerEnd);
         
-        console.log(`📝 Скрипт модифицирован: версия ${forceVersion}`);
-        return modifiedScript;
+        console.log(`📝 Версия изменена на: ${newVersion}`);
+        return modified;
     }
 
-    // Создание временного файла для скачивания
-    function createTemporaryUpdateFile() {
-        const timestamp = Date.now();
-        
-        fetch(`${UPDATE_CONFIG.DIRECT_UPDATE_URL}?v=${timestamp}`)
-            .then(response => response.text())
-            .then(scriptContent => {
-                // Создаем уникальное имя файла
-                const filename = `wms-update-${timestamp}.user.js`;
-                
-                // Модифицируем скрипт
-                const modifiedScript = createForceUpdateScript(scriptContent);
-                
-                // Создаем и скачиваем файл
-                const element = document.createElement('a');
-                const file = new Blob([modifiedScript], { type: 'text/javascript' });
-                element.href = URL.createObjectURL(file);
-                element.download = filename;
-                document.body.appendChild(element);
-                element.click();
-                document.body.removeChild(element);
-                
-                showNotification(`Скачан файл: ${filename}. Перетащите его в браузер!`, 'success');
-                
-                setTimeout(() => {
-                    showDragDropInstructions(filename);
-                }, 1000);
-            })
-            .catch(error => {
-                console.error('Ошибка создания временного файла:', error);
-                showNotification('Ошибка создания файла', 'error');
-            });
-    }
-
-    // Показать инструкции для принудительного обновления
-    function showForceUpdateInstructions() {
+    // Простые инструкции для пользователя
+    function showSimpleInstructions() {
         const modal = document.createElement('div');
         modal.style.cssText = `
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
@@ -163,163 +120,36 @@
         `;
         
         modal.innerHTML = `
-            <div style="background: white; border-radius: 10px; padding: 25px; max-width: 500px; width: 90%; box-shadow: 0 10px 30px rgba(0,0,0,0.3);">
-                <div style="text-align: center; margin-bottom: 20px;">
-                    <div style="font-size: 18px; font-weight: bold; color: #FF5722; margin-bottom: 10px;">
-                        🚀 Принудительное обновление
-                    </div>
-                    <div style="font-size: 12px; color: #666;">
-                        Скрипт автоматически модифицирован для обновления
-                    </div>
+            <div style="background: white; border-radius: 10px; padding: 30px; max-width: 400px; width: 90%; box-shadow: 0 10px 30px rgba(0,0,0,0.3); text-align: center;">
+                <div style="font-size: 20px; font-weight: bold; color: #4CAF50; margin-bottom: 15px;">
+                    🚀 Скрипт готов к установке!
                 </div>
                 
-                <div style="margin-bottom: 20px;">
-                    <div style="font-weight: bold; margin-bottom: 10px; color: #333;">📋 Что делать:</div>
-                    <div style="background: #fff3e0; padding: 15px; border-radius: 5px; font-size: 13px; line-height: 1.5;">
-                        <div style="margin-bottom: 8px;">1️⃣ Tampermonkey покажет кнопку <strong>"Установить"</strong> или <strong>"Переустановить"</strong></div>
-                        <div style="margin-bottom: 8px;">2️⃣ Нажмите <strong>"Установить"</strong> (принимает любую версию)</div>
-                        <div style="margin-bottom: 8px;">3️⃣ Закройте вкладку установки</div>
-                        <div>4️⃣ Перезагрузите эту страницу (<strong>F5</strong>)</div>
-                    </div>
+                <div style="margin-bottom: 20px; font-size: 14px; color: #333; line-height: 1.5;">
+                    В новой вкладке Tampermonkey покажет кнопку <strong>"Установить"</strong> или <strong>"Переустановить"</strong>
                 </div>
                 
-                <div style="margin-bottom: 15px; padding: 10px; background: #e3f2fd; border-radius: 5px; font-size: 11px; color: #1565c0;">
-                    ℹ️ <strong>Принудительное обновление:</strong> Версия автоматически изменена на уникальную, чтобы Tampermonkey точно предложил установку.
+                <div style="margin-bottom: 20px; padding: 15px; background: #e8f5e8; border-radius: 5px; font-size: 13px; color: #2e7d32;">
+                    <strong>Что делать:</strong><br>
+                    1️⃣ Нажмите <strong>"Установить"</strong><br>
+                    2️⃣ Закройте вкладку обновления<br>
+                    3️⃣ Перезагрузите эту страницу (F5)
                 </div>
                 
-                <div style="text-align: center;">
-                    <button onclick="this.closest('div').parentElement.remove()" 
-                            style="padding: 10px 20px; background: #FF5722; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 14px; margin-right: 10px;">
-                        👍 Понятно
-                    </button>
-                    <button onclick="window.wmsDownloadUpdate(); this.closest('div').parentElement.remove();" 
-                            style="padding: 10px 20px; background: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 14px;">
-                        📥 Скачать файл
-                    </button>
-                </div>
+                <button onclick="this.closest('div').parentElement.remove()" 
+                        style="padding: 12px 24px; background: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 14px; font-weight: bold;">
+                    👍 Понятно
+                </button>
             </div>
         `;
         
         document.body.appendChild(modal);
+        
+        // Автоматическое закрытие через 20 секунд
         setTimeout(() => {
-            if (modal.parentElement) modal.remove();
-        }, 30000);
-    }
-
-    // Инструкции для drag&drop
-    function showDragDropInstructions(filename) {
-        const modal = document.createElement('div');
-        modal.style.cssText = `
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.7); z-index: 99999; display: flex;
-            align-items: center; justify-content: center; font-family: Arial, sans-serif;
-        `;
-        
-        modal.innerHTML = `
-            <div style="background: white; border-radius: 10px; padding: 25px; max-width: 450px; width: 90%; box-shadow: 0 10px 30px rgba(0,0,0,0.3);">
-                <div style="text-align: center; margin-bottom: 20px;">
-                    <div style="font-size: 18px; font-weight: bold; color: #4CAF50; margin-bottom: 10px;">
-                        📥 Файл скачан
-                    </div>
-                    <div style="font-size: 12px; color: #666;">
-                        ${filename}
-                    </div>
-                </div>
-                
-                <div style="margin-bottom: 20px;">
-                    <div style="font-weight: bold; margin-bottom: 10px; color: #333;">📋 Установка:</div>
-                    <div style="background: #f5f5f5; padding: 15px; border-radius: 5px; font-size: 13px; line-height: 1.5;">
-                        <div style="margin-bottom: 8px;">1️⃣ Найдите скачанный файл в папке загрузок</div>
-                        <div style="margin-bottom: 8px;">2️⃣ Перетащите файл на любую страницу браузера</div>
-                        <div style="margin-bottom: 8px;">3️⃣ Tampermonkey покажет окно установки</div>
-                        <div>4️⃣ Нажмите <strong>"Установить"</strong></div>
-                    </div>
-                </div>
-                
-                <div style="text-align: center;">
-                    <button onclick="this.closest('div').parentElement.remove()" 
-                            style="padding: 10px 20px; background: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 14px;">
-                        👍 Понятно
-                    </button>
-                </div>
-            </div>
-        `;
-        
-        document.body.appendChild(modal);
-    }
-
-    // Простая функция открытия ссылки для обновления с антикэш параметрами (обычный метод)
-    function openUpdateLink() {
-        console.log('🔄 Открываем ссылку для обычного обновления...');
-        
-        // Добавляем timestamp для обхода кэша
-        const timestamp = Date.now();
-        const updateUrl = `${UPDATE_CONFIG.DIRECT_UPDATE_URL}?v=${timestamp}&_=${Math.random()}`;
-        
-        console.log('📱 URL для обновления:', updateUrl);
-        showNotification('Открываем страницу обновления...', 'info');
-        
-        // Открываем ссылку с антикэш параметрами
-        window.open(updateUrl, '_blank');
-        
-        setTimeout(() => {
-            showUpdateInstructions();
-        }, 500);
-    }
-
-    // Показать инструкции по обновлению (обычный метод)
-    function showUpdateInstructions() {
-        const modal = document.createElement('div');
-        modal.style.cssText = `
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.6); z-index: 99999; display: flex;
-            align-items: center; justify-content: center; font-family: Arial, sans-serif;
-        `;
-        
-        modal.innerHTML = `
-            <div style="background: white; border-radius: 10px; padding: 25px; max-width: 450px; width: 90%; box-shadow: 0 10px 30px rgba(0,0,0,0.3);">
-                <div style="text-align: center; margin-bottom: 20px;">
-                    <div style="font-size: 18px; font-weight: bold; color: #2196F3; margin-bottom: 10px;">
-                        🔗 Обычное обновление
-                    </div>
-                    <div style="font-size: 12px; color: #666;">
-                        Зависит от кэша GitHub
-                    </div>
-                </div>
-                
-                <div style="margin-bottom: 20px;">
-                    <div style="font-weight: bold; margin-bottom: 10px; color: #333;">📋 Если Tampermonkey показывает кнопку обновления:</div>
-                    <div style="background: #e3f2fd; padding: 15px; border-radius: 5px; font-size: 13px; line-height: 1.5;">
-                        <div style="margin-bottom: 8px;">✅ Нажмите <strong>"Обновить"</strong> или <strong>"Переустановить"</strong></div>
-                        <div style="margin-bottom: 8px;">✅ Закройте вкладку</div>
-                        <div>✅ Перезагрузите страницу (<strong>F5</strong>)</div>
-                    </div>
-                </div>
-                
-                <div style="margin-bottom: 15px;">
-                    <div style="font-weight: bold; margin-bottom: 10px; color: #333;">⚠️ Если кнопки обновления НЕТ:</div>
-                    <div style="background: #fff3e0; padding: 15px; border-radius: 5px; font-size: 13px; line-height: 1.5;">
-                        <div style="margin-bottom: 8px;">🔄 Используйте <strong>"Принудительное обновление"</strong></div>
-                        <div>📥 Или <strong>"Скачать и установить"</strong></div>
-                    </div>
-                </div>
-                
-                <div style="text-align: center;">
-                    <button onclick="this.closest('div').parentElement.remove()" 
-                            style="padding: 10px 15px; background: #2196F3; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 14px; margin-right: 10px;">
-                        👍 Понятно
-                    </button>
-                    <button onclick="window.wmsForceUpdate(); this.closest('div').parentElement.remove();" 
-                            style="padding: 10px 15px; background: #FF5722; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 14px;">
-                        🚀 Принудительное
-                    </button>
-                </div>
-            </div>
-        `;
-        
-        document.body.appendChild(modal);
-        setTimeout(() => {
-            if (modal.parentElement) modal.remove();
+            if (modal.parentElement) {
+                modal.remove();
+            }
         }, 20000);
     }
 
@@ -342,7 +172,7 @@
     // Пресеты для всех столов комплектации (ВСТРОЕННЫЕ ДАННЫЕ) - по буквенным названиям
     const TABLE_PRESETS = {
         "Стол 12": {
-            "Парнас": "555555555555555555",
+            "Парнас": "2222222222222222222",
             "Международная": "2---Международная",
             "Всеволожск": "3---Всеволожск",
             "Красное": "4---Красное Село",
@@ -596,7 +426,7 @@
         return userPresets[currentPreset] || {};
     }
 
-    // ========== НОВЫЕ ФУНКЦИИ ДЛЯ ПОЛЬЗОВАТЕЛЬСКИХ СТОЛОВ ==========
+    // ========== ФУНКЦИИ ДЛЯ ПОЛЬЗОВАТЕЛЬСКИХ СТОЛОВ ==========
 
     // Создать новый пользовательский стол
     function createCustomTable(tableName) {
@@ -726,18 +556,13 @@
         return tables;
     }
 
-    // ========== ОБРАБОТКА НАЗВАНИЙ НАПРАВЛЕНИЙ (УЛУЧШЕНО) ==========
+    // ========== ОБРАБОТКА НАЗВАНИЙ НАПРАВЛЕНИЙ ==========
 
-    // УЛУЧШЕННАЯ функция поиска соответствий
-    // Теперь ищет название из маппинга ВНУТРИ полного направления
+    // Функция поиска соответствий
     function findMappingByLocationName(fullDirection, mappings) {
         if (!fullDirection || !mappings) {
-            console.log('🔍 Поиск: пустое направление или маппинги');
             return null;
         }
-
-        console.log('🔍 Начинаем поиск соответствий...');
-        console.log('📍 Полное направление:', `"${fullDirection}"`);
 
         // Нормализуем направление для поиска
         const normalizedDirection = fullDirection.toLowerCase().trim();
@@ -746,19 +571,14 @@
         for (const [mappingKey, mappingValue] of Object.entries(mappings)) {
             const normalizedKey = mappingKey.toLowerCase().trim();
 
-            console.log(`🔍 Проверяем: "${mappingKey}" → "${mappingValue}"`);
-
             // Проверяем, содержится ли название из маппинга в полном направлении
             if (normalizedDirection.includes(normalizedKey)) {
-                console.log(`✅ НАЙДЕНО ТОЧНОЕ СОВПАДЕНИЕ: "${mappingKey}" содержится в "${fullDirection}"`);
-                console.log(`📦 Возвращаем контейнер: ${mappingValue}`);
+                console.log(`✅ НАЙДЕНО: "${mappingKey}" → ${mappingValue}`);
                 return mappingValue;
             }
         }
 
-        console.log('🔍 Точных совпадений не найдено, пробуем частичные...');
-
-        // Если точных совпадений нет, ищем частичные (более мягкий поиск)
+        // Если точных совпадений нет, ищем частичные
         for (const [mappingKey, mappingValue] of Object.entries(mappings)) {
             const normalizedKey = mappingKey.toLowerCase().trim();
 
@@ -781,18 +601,15 @@
             }
 
             if (hasPartialMatch) {
-                console.log(`🔍 НАЙДЕНО ЧАСТИЧНОЕ СОВПАДЕНИЕ: "${mappingKey}" ~ "${fullDirection}"`);
-                console.log(`📦 Возвращаем контейнер: ${mappingValue}`);
+                console.log(`🔍 ЧАСТИЧНОЕ: "${mappingKey}" ~ "${fullDirection}" → ${mappingValue}`);
                 return mappingValue;
             }
         }
 
-        console.log('❌ Соответствие не найдено');
-        console.log('📋 Доступные маппинги:', Object.keys(mappings));
         return null;
     }
 
-    // ДОПОЛНИТЕЛЬНАЯ функция извлечения названия (как fallback)
+    // Функция извлечения названия (как fallback)
     function extractLocationName(fullDirection) {
         if (!fullDirection) return null;
 
@@ -822,7 +639,7 @@
         return false;
     }
 
-    // Добавить/изменить направление в текущем пресете (по буквенному названию)
+    // Добавить/изменить направление в текущем пресете
     function addMappingToCurrentPreset(locationName, container) {
         if (!userPresets[currentPreset]) {
             userPresets[currentPreset] = {};
@@ -1004,15 +821,9 @@
             // Добавить класс с большим шрифтом
             containerElement1.classList.add('wms-large-container');
 
-            console.log('✨ Применен CSS класс для увеличенного шрифта к контейнеру 1');
-            console.log('Размер шрифта:', LARGE_FONT_SIZE);
-            console.log('Классы элемента:', containerElement1.className);
-
             return true;
-        } else {
-            console.warn('❌ Контейнер 1 не найден по XPath:', CONTAINER_XPATH_1);
-            return false;
         }
+        return false;
     }
 
     // Установить значение контейнера в оба поля
@@ -1034,8 +845,6 @@
 
                 console.log(`✅ ${container.name} установлен: ${containerValue}`);
                 successCount++;
-            } else {
-                console.warn(`❌ ${container.name} не найден по пути: ${container.xpath}`);
             }
         });
 
@@ -1051,33 +860,24 @@
         return false;
     }
 
-    // УЛУЧШЕННАЯ основная функция проверки и замены
+    // Основная функция проверки и замены
     function checkAndReplace(forced = false) {
         const currentDirection = getCurrentDirection(!forced);
         const currentMappings = getCurrentMappings();
 
-        console.log('🔄 === НАЧАЛО ПРОВЕРКИ ===');
-        console.log('📍 Направление с сайта:', currentDirection || 'НЕ НАЙДЕНО');
-        console.log('📋 Активный пресет:', currentPreset);
-        console.log('📊 Количество маппингов:', Object.keys(currentMappings).length);
-
         if (currentDirection) {
-            // НОВЫЙ ПОДХОД: сначала ищем напрямую в полном направлении
+            // Поиск в полном направлении
             let newContainer = findMappingByLocationName(currentDirection, currentMappings);
 
-            // Если не нашли, пробуем старый подход (fallback)
+            // Если не нашли, пробуем через извлечение
             if (!newContainer) {
-                console.log('🔄 Пробуем старый подход с извлечением названия...');
                 const locationName = extractLocationName(currentDirection);
-                console.log(`📝 Извлеченное название: "${locationName}"`);
-
                 if (locationName) {
                     newContainer = findMappingByLocationName(locationName, currentMappings);
                 }
             }
 
             if (newContainer) {
-                // Быстрая проверка - получаем элементы из кэша если возможно
                 const containerElement1 = getElementByXPath(CONTAINER_XPATH_1, !forced);
                 const containerElement2 = getElementByXPath(CONTAINER_XPATH_2, !forced);
 
@@ -1085,40 +885,22 @@
                 const currentContainer2 = containerElement2 ? containerElement2.textContent.trim() : '';
 
                 if (currentContainer1 !== newContainer || currentContainer2 !== newContainer) {
-                    console.log(`🚀 НАЙДЕН КОНТЕЙНЕР: ${newContainer}`);
-                    console.log('💾 Устанавливаем контейнер...');
                     setContainer(newContainer);
-                    console.log('🔄 === ПРОВЕРКА ЗАВЕРШЕНА: УСПЕШНО ===');
                     return true;
-                } else {
-                    console.log('✅ Контейнер уже установлен правильно');
-                }
-            } else {
-                console.log('❌ Соответствие не найдено');
-                if (forced) {
-                    console.log('📋 Попробуйте добавить направление в маппинги:');
-                    console.log(`   Направление: "${currentDirection}"`);
-                    console.log(`   Активный стол: "${currentPreset}"`);
                 }
             }
-        } else {
-            console.log('❌ Направление не найдено на странице');
         }
-
-        console.log('🔄 === ПРОВЕРКА ЗАВЕРШЕНА: БЕЗ ИЗМЕНЕНИЙ ===');
         return false;
     }
 
-    // Быстрая проверка без подробного логирования (для частых вызовов)
+    // Быстрая проверка без подробного логирования
     function quickCheck() {
         const currentDirection = getCurrentDirection(true);
         const currentMappings = getCurrentMappings();
 
         if (currentDirection) {
-            // Сначала прямой поиск
             let newContainer = findMappingByLocationName(currentDirection, currentMappings);
 
-            // Потом через извлечение
             if (!newContainer) {
                 const locationName = extractLocationName(currentDirection);
                 if (locationName) {
@@ -1140,63 +922,33 @@
         return false;
     }
 
-    // ========== ДИАГНОСТИКА (скрытая функция) ==========
+    // ========== ДИАГНОСТИКА ==========
 
     function diagnoseElements() {
         console.log('=== ДИАГНОСТИКА ЭЛЕМЕНТОВ ===');
 
-        // Информация о версиях и обновлениях
+        // Информация о версиях
         const lastVersion = localStorage.getItem('wms_last_version');
         console.log('Текущая версия скрипта:', CURRENT_VERSION);
         console.log('Последняя сохраненная версия:', lastVersion || 'НЕ СОХРАНЕНА');
-        console.log('Требуется обновление пресетов:', lastVersion !== CURRENT_VERSION);
 
         // Информация о пресетах
         console.log('Текущий активный пресет:', currentPreset);
         console.log('Количество направлений в активном пресете:', Object.keys(getCurrentMappings()).length);
-        console.log('Информация о всех пресетах:', getPresetsInfo());
 
         // Проверка направления
         const directionElement = getElementByXPath(DIRECTION_XPATH);
         const fullDirection = directionElement ? directionElement.textContent.trim() : null;
-        const locationName = extractLocationName(fullDirection);
 
         console.log('Элемент направления:', directionElement);
         console.log('Полное направление:', fullDirection || 'НЕ НАЙДЕНО');
-        console.log('Извлеченное название:', locationName || 'НЕ ИЗВЛЕЧЕНО');
-
-        // Проверка соответствия
-        if (fullDirection) {
-            const currentMappings = getCurrentMappings();
-            console.log('=== ТЕСТ ПОИСКА ===');
-            const foundContainer = findMappingByLocationName(fullDirection, currentMappings);
-            console.log('Результат поиска:', foundContainer || 'НЕТ СООТВЕТСТВИЯ');
-        }
 
         // Проверка контейнеров
         const containerElement1 = getElementByXPath(CONTAINER_XPATH_1);
         const containerElement2 = getElementByXPath(CONTAINER_XPATH_2);
 
-        console.log('Контейнер 1:', containerElement1);
-        console.log('Контейнер 1 текст:', containerElement1 ? containerElement1.textContent : 'НЕ НАЙДЕНО');
-        console.log('Контейнер 1 классы:', containerElement1 ? containerElement1.className : 'НЕТ');
-        console.log('Размер шрифта:', LARGE_FONT_SIZE);
-
-        console.log('Контейнер 2:', containerElement2);
-        console.log('Контейнер 2 текст:', containerElement2 ? containerElement2.textContent : 'НЕ НАЙДЕНО');
-
-        // Поиск похожих элементов
-        console.log('--- Поиск альтернативных элементов ---');
-        const h1Elements = document.querySelectorAll('h1');
-        console.log('Найдено H1 элементов:', h1Elements.length);
-
-        const bElements = document.querySelectorAll('b');
-        console.log('Найдено B элементов:', bElements.length);
-        bElements.forEach((el, i) => {
-            if (el.textContent.includes('Дыбенко') || el.textContent.includes('156-157')) {
-                console.log(`B[${i}] (СОВПАДЕНИЕ):`, el.textContent);
-            }
-        });
+        console.log('Контейнер 1:', containerElement1 ? containerElement1.textContent : 'НЕ НАЙДЕНО');
+        console.log('Контейнер 2:', containerElement2 ? containerElement2.textContent : 'НЕ НАЙДЕНО');
     }
 
     // ========== УВЕДОМЛЕНИЯ ==========
@@ -1276,7 +1028,7 @@
             </div>
 
             <div style="margin-bottom: 15px; font-size: 11px; color: #666;">
-                Автозамена контейнеров + принудительные обновления + пользовательские столы
+                Автозамена контейнеров + простое обновление + пользовательские столы
             </div>
 
             <!-- Табы -->
@@ -1378,66 +1130,42 @@
                 </div>
             </div>
 
-            <!-- Вкладка обновлений -->
+            <!-- Вкладка обновлений - УПРОЩЕННАЯ -->
             <div id="wms-tab-updates" class="wms-tab-content" style="display: none;">
                 <div class="wms-section">
-                    <div style="font-weight: bold; margin-bottom: 15px; color: #333;">🔄 Обновление скрипта</div>
-                    
-                    <div style="margin-bottom: 10px;">
-                        <button id="wms-force-update" style="width: 100%; padding: 12px; background: #FF5722; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 14px; font-weight: bold;">
-                            🚀 ПРИНУДИТЕЛЬНОЕ ОБНОВЛЕНИЕ
-                        </button>
-                        <div style="font-size: 10px; color: #888; margin-top: 2px; text-align: center;">
-                            Обновляет независимо от версии
-                        </div>
+                    <div style="font-weight: bold; margin-bottom: 20px; color: #333; text-align: center;">
+                        🔄 Обновление скрипта
                     </div>
                     
-                    <div style="margin-bottom: 10px;">
-                        <button id="wms-download-update" style="width: 100%; padding: 10px; background: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 12px;">
-                            📥 Скачать и установить
-                        </button>
-                        <div style="font-size: 10px; color: #888; margin-top: 2px; text-align: center;">
-                            Скачивает файл для установки
-                        </div>
-                    </div>
-                    
-                    <div style="margin-bottom: 15px;">
-                        <button id="wms-open-update" style="width: 100%; padding: 10px; background: #2196F3; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 12px;">
-                            🔗 Обычная ссылка GitHub
-                        </button>
-                        <div style="font-size: 10px; color: #888; margin-top: 2px; text-align: center;">
-                            Стандартный метод (может не сработать)
-                        </div>
-                    </div>
-                    
-                    <div style="margin-bottom: 15px;">
-                        <button onclick="window.open('${UPDATE_CONFIG.GITHUB_REPO}')" style="width: 100%; padding: 8px; background: #333; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 12px;">
-                            📁 GitHub репозиторий
+                    <div style="margin-bottom: 20px; text-align: center;">
+                        <button id="wms-update-script" style="width: 100%; padding: 15px; background: #4CAF50; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: bold; box-shadow: 0 4px 12px rgba(76,175,80,0.3);">
+                            🚀 Обновить скрипт
                         </button>
                     </div>
                     
-                    <div style="font-size: 11px; color: #666; line-height: 1.4; margin-bottom: 15px;">
-                        <strong>Локальная версия:</strong> ${CURRENT_VERSION}<br>
-                        <strong>Метод:</strong> Принудительный (игнорирует версии)<br>
-                        <strong>Кэширование:</strong> Обходится автоматически
+                    <div style="font-size: 11px; color: #666; line-height: 1.4; margin-bottom: 15px; text-align: center;">
+                        <strong>Текущая версия:</strong> ${CURRENT_VERSION}<br>
+                        <strong>Источник:</strong> GitHub<br>
+                        <strong>Метод:</strong> Автоматический
                     </div>
                     
-                    <div style="padding: 10px; background: #ffebee; border-radius: 4px; font-size: 11px; color: #c62828; margin-bottom: 10px;">
-                        🚀 <strong>Принудительное обновление:</strong><br>
-                        Автоматически изменяет версию скрипта, чтобы Tampermonkey гарантированно предложил установку/переустановку.
+                    <div style="padding: 12px; background: #e8f5e8; border-radius: 5px; font-size: 11px; color: #2e7d32; text-align: center;">
+                        ✅ <strong>Простое обновление:</strong><br>
+                        Кнопка автоматически загружает актуальную версию с GitHub и открывает её для установки в Tampermonkey.
                     </div>
                     
-                    <div style="padding: 10px; background: #e8f5e8; border-radius: 4px; font-size: 11px; color: #2e7d32; margin-bottom: 10px;">
-                        📥 <strong>Скачать и установить:</strong><br>
-                        Создает файл .user.js с уникальной версией. Перетащите его в браузер для установки.
+                    <div style="margin-top: 15px; text-align: center;">
+                        <button onclick="window.open('${UPDATE_CONFIG.GITHUB_REPO}')" style="padding: 8px 16px; background: #333; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 11px;">
+                            📁 Открыть GitHub
+                        </button>
                     </div>
                     
-                    <div style="margin-top: 10px;">
+                    <div style="margin-top: 15px;">
                         <button id="wms-force-update-presets" style="width: 100%; padding: 6px; background: #9E9E9E; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 11px;">
-                            🔄 Принудительно обновить пресеты
+                            🔄 Обновить только пресеты
                         </button>
                         <div style="font-size: 10px; color: #888; margin-top: 2px; text-align: center;">
-                            Только для пресетов направлений
+                            Если нужно обновить только направления столов
                         </div>
                     </div>
                 </div>
@@ -1470,7 +1198,7 @@
             });
         });
 
-        // Остальные обработчики событий...
+        // Обработчики событий
         setupPanelEventHandlers(panel);
 
         updateMappingsList();
@@ -1510,24 +1238,14 @@
             }
         });
 
-        // ПРИНУДИТЕЛЬНОЕ ОБНОВЛЕНИЕ - главная кнопка
-        document.getElementById('wms-force-update').addEventListener('click', function() {
-            openForceUpdateLink();
+        // ЕДИНСТВЕННАЯ КНОПКА ОБНОВЛЕНИЯ
+        document.getElementById('wms-update-script').addEventListener('click', function() {
+            updateScript();
         });
 
-        // Скачать и установить
-        document.getElementById('wms-download-update').addEventListener('click', function() {
-            createTemporaryUpdateFile();
-        });
-
-        // Обычная ссылка GitHub (старый метод)
-        document.getElementById('wms-open-update').addEventListener('click', function() {
-            openUpdateLink(); // Старая функция с антикэш параметрами
-        });
-
-        // Принудительное обновление пресетов
+        // Обновление только пресетов
         document.getElementById('wms-force-update-presets').addEventListener('click', function() {
-            if (confirm('Принудительно обновить все встроенные пресеты? Пользовательские направления будут сохранены.')) {
+            if (confirm('Обновить пресеты направлений до актуальной версии? Пользовательские направления будут сохранены.')) {
                 localStorage.removeItem('wms_last_version');
                 loadSettings();
                 
@@ -1536,7 +1254,7 @@
                 createControlPanel();
                 document.getElementById('wms-control-panel').style.display = 'block';
                 
-                showNotification('Пресеты принудительно обновлены!', 'success');
+                showNotification('Пресеты направлений обновлены!', 'success');
             }
         });
 
@@ -1683,7 +1401,6 @@
                 updateTablesList();
                 const panel = document.getElementById('wms-control-panel');
                 if (currentPreset === newName) {
-                    // Если переименован активный стол, обновляем интерфейс
                     panel.style.display = 'none';
                     createControlPanel();
                     document.getElementById('wms-control-panel').style.display = 'block';
@@ -1702,9 +1419,8 @@
                 updateTablesList();
                 const panel = document.getElementById('wms-control-panel');
                 if (currentPreset !== tableName) {
-                    updateTablesList(); // Просто обновляем список
+                    updateTablesList();
                 } else {
-                    // Если удален активный стол, переключились на стол 18, обновляем интерфейс
                     panel.style.display = 'none';
                     createControlPanel();
                     document.getElementById('wms-control-panel').style.display = 'block';
@@ -1768,7 +1484,6 @@
             }
         }
 
-        // Обновить счетчик
         updateMappingsCount();
     }
 
@@ -1794,11 +1509,11 @@
             applyLargeFontToContainer1();
         }, 500);
 
-        // Основной цикл быстрых проверок (каждые 500ms)
+        // Основной цикл проверок
         normalCheckTimer = setInterval(() => {
             if (isEnabled) {
                 quickCheck();
-                applyLargeFontToContainer1(); // Переприменяем шрифт
+                applyLargeFontToContainer1();
             }
         }, CHECK_INTERVAL);
 
@@ -1814,7 +1529,7 @@
             if (isEnabled) {
                 quickCheck();
             }
-        }, 100); // Ультрабыстрые проверки каждые 100ms
+        }, 100);
 
         // Отключаем быстрый режим через 10 секунд
         setTimeout(() => {
@@ -1845,7 +1560,6 @@
                 if (mutation.type === 'childList' || mutation.type === 'characterData') {
                     const target = mutation.target;
 
-                    // Быстрая проверка - ищем изменения в областях направления или контейнеров
                     if (target.tagName === 'B' || target.tagName === 'H1' ||
                         target.closest('div[5]') || target.querySelector('b, h1')) {
                         shouldCheck = true;
@@ -1897,7 +1611,7 @@
                 showNotification('Шрифт переприменен принудительно', 'info');
             }
 
-            // Ctrl+Shift+D - диагностика (скрытая функция)
+            // Ctrl+Shift+D - диагностика
             if (e.ctrlKey && e.shiftKey && e.code === 'KeyD') {
                 e.preventDefault();
                 diagnoseElements();
@@ -1911,10 +1625,10 @@
                 showNotification('Режим быстрых проверок запущен!', 'info');
             }
 
-            // Ctrl+Shift+U - принудительное обновление
+            // Ctrl+Shift+U - обновить скрипт
             if (e.ctrlKey && e.shiftKey && e.code === 'KeyU') {
                 e.preventDefault();
-                openForceUpdateLink();
+                updateScript();
             }
         });
 
@@ -1969,12 +1683,12 @@
 
     // Функция инициализации
     function initialize() {
-        console.log('🚀 WMS Container Override Enhanced v2.9 с принудительными обновлениями активирован');
+        console.log('🚀 WMS Container Override Enhanced v3.0 с простым обновлением активирован');
 
         // Внедрить CSS стили
         injectCSS();
 
-        // Загрузить настройки (включая проверку обновлений пресетов)
+        // Загрузить настройки
         loadSettings();
 
         // Создать кнопку управления
@@ -2008,20 +1722,18 @@
         setTimeout(initialize, 150);
     }
 
-    // ========== ГЛОБАЛЬНЫЕ ФУНКЦИИ ДЛЯ ТЕСТИРОВАНИЯ ==========
+    // ========== ГЛОБАЛЬНЫЕ ФУНКЦИИ ==========
     
-    // Функции для ручного управления обновлениями и отладки
-    window.wmsUpdate = () => openUpdateLink();              // Обычное обновление
-    window.wmsForceUpdate = () => openForceUpdateLink();    // Принудительное обновление  
-    window.wmsDownloadUpdate = () => createTemporaryUpdateFile(); // Скачать файл
+    // Упрощенные глобальные функции
+    window.wmsUpdate = () => updateScript();  // Единственная функция обновления
     window.wmsShowVersion = () => console.log(`WMS Container Override v${CURRENT_VERSION}`);
     window.wmsForceUpdatePresets = () => {
         localStorage.removeItem('wms_last_version');
         loadSettings();
-        console.log('Пресеты принудительно обновлены!');
+        console.log('Пресеты обновлены!');
     };
 
-    console.log('✅ WMS Container Override Enhanced v2.9 с принудительным обновлением загружен');
-    console.log('🔧 Команды: wmsUpdate(), wmsForceUpdate(), wmsDownloadUpdate(), wmsForceUpdatePresets()');
+    console.log('✅ WMS Container Override Enhanced v3.0 с простым обновлением загружен');
+    console.log('🔧 Команды: wmsUpdate(), wmsShowVersion(), wmsForceUpdatePresets()');
 
 })();

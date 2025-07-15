@@ -4,12 +4,12 @@
 // @version      4.0
 // @description  Автозамена контейнеров WMS с полной функциональностью + GitHub API обновления
 // @author       Жигалов Ю.В.
-// @match        https://claude.ai/*
+// @match        http://edu.sutd.ru/moodle/*
 // @grant        GM_xmlhttpRequest
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @grant        GM_notification
-// @exclude      https://claude.ai/*
+// @exclude      https://wms.vseinstrumenti.ru/Report/*
 // @updateURL    https://raw.githubusercontent.com/Pwnzord123/OtgruzkaSPB/main/wms-script.user.js
 // @downloadURL  https://raw.githubusercontent.com/Pwnzord123/OtgruzkaSPB/main/wms-script.user.js
 // @supportURL   https://github.com/Pwnzord123/OtgruzkaSPB
@@ -52,7 +52,7 @@
     // Пресеты для всех столов комплектации (ВСТРОЕННЫЕ ДАННЫЕ) - по буквенным названиям
     const TABLE_PRESETS = {
         "Стол 12": {
-            "Парнас": "гавна",
+            "Парнас": "какашка",
             "Международная": "2---Международная",
             "Всеволожск": "3---Всеволожск",
             "Красное": "4---Красное Село",

@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         WMS Container Override Enhanced - Simple Updates
+// @name         WMS Container Override Enhanced - Complete with GitHub API
 // @namespace    http://tampermonkey.net/
-// @version      3.0
-// @description  Автозамена контейнеров WMS с простым обновлением через GitHub
+// @version      4.0
+// @description  Автозамена контейнеров WMS с полной функциональностью + GitHub API обновления
 // @author       Жигалов Ю.В.
 // @match        https://wms.vseinstrumenti.ru/*
 // @grant        GM_xmlhttpRequest
@@ -18,404 +18,22 @@
 (function() {
     'use strict';
 
-    // ========== СИСТЕМА ОБНОВЛЕНИЙ С ПАРСИНГОМ GITHUB ==========
-    
-    const UPDATE_CONFIG = {
-        DIRECT_UPDATE_URL: 'https://raw.githubusercontent.com/Pwnzord123/OtgruzkaSPB/main/wms-script.user.js',
-        GITHUB_HTML_URL: 'https://github.com/Pwnzord123/OtgruzkaSPB/blob/main/wms-script.user.js',
-        GITHUB_API_URL: 'https://api.github.com/repos/Pwnzord123/OtgruzkaSPB/contents/wms-script.user.js',
-        GITHUB_REPO: 'https://github.com/Pwnzord123/OtgruzkaSPB'
+    // ========== КОНФИГУРАЦИЯ GitHub API ==========
+
+    const GITHUB_CONFIG = {
+        owner: 'Pwnzord123',
+        repo: 'OtgruzkaSPB',
+        branch: 'main',
+        scriptPath: 'wms-script.user.js',
+        apiBase: 'https://api.github.com',
+        rawBase: 'https://raw.githubusercontent.com',
+        webBase: 'https://github.com'
     };
 
     // Текущая версия скрипта
-    const CURRENT_VERSION = '3.0';
+    const CURRENT_VERSION = '4.0';
 
-    // Главная функция обновления с несколькими методами
-    function updateScript() {
-        console.log('🔄 Обновление скрипта с парсингом GitHub...');
-        showNotification('Загружаем актуальную версию с GitHub...', 'info');
-        
-        updateWithMultipleMethods();
-    }
-
-    async function updateWithMultipleMethods() {
-        const methods = [
-            { name: 'Raw URL с обходом кэша', func: fetchFromRawURL },
-            { name: 'Парсинг HTML GitHub', func: fetchFromGitHubHTML },
-            { name: 'GitHub API', func: fetchFromGitHubAPI }
-        ];
-        
-        for (let i = 0; i < methods.length; i++) {
-            try {
-                console.log(`🔄 Метод ${i + 1}: ${methods[i].name}...`);
-                showNotification(`Пробуем метод ${i + 1}: ${methods[i].name}...`, 'info');
-                
-                const scriptContent = await methods[i].func();
-                
-                if (scriptContent && scriptContent.length > 5000 && scriptContent.includes('WMS Container Override')) {
-                    console.log(`✅ Метод ${i + 1} успешен! Размер: ${scriptContent.length} символов`);
-                    await processAndInstallScript(scriptContent, methods[i].name);
-                    return;
-                } else {
-                    throw new Error('Получен некорректный контент');
-                }
-            } catch (error) {
-                console.warn(`❌ Метод ${i + 1} (${methods[i].name}) неудачен:`, error.message);
-                if (i < methods.length - 1) {
-                    showNotification(`Метод ${i + 1} неудачен, пробуем следующий...`, 'info');
-                    await new Promise(resolve => setTimeout(resolve, 1000)); // Пауза между попытками
-                }
-            }
-        }
-        
-        // Если все методы неудачны
-        console.error('❌ Все методы обновления неудачны');
-        showNotification('Автообновление неудачно. Открываем GitHub...', 'error');
-        setTimeout(() => {
-            window.open(UPDATE_CONFIG.GITHUB_REPO, '_blank');
-            showManualUpdateInstructions();
-        }, 2000);
-    }
-
-    // Метод 1: Raw URL с агрессивным обходом кэша
-    async function fetchFromRawURL() {
-        const timestamp = Date.now();
-        const randomParam = Math.random().toString(36).substring(7);
-        const fetchUrl = `${UPDATE_CONFIG.DIRECT_UPDATE_URL}?v=${timestamp}&_=${randomParam}&nocache=${Date.now()}&bust=${Math.floor(Math.random() * 1000000)}`;
-        
-        const response = await fetch(fetchUrl, {
-            method: 'GET',
-            headers: {
-                'Cache-Control': 'no-cache, no-store, must-revalidate',
-                'Pragma': 'no-cache',
-                'Expires': '0',
-                'If-None-Match': '*',
-                'If-Modified-Since': 'Thu, 01 Jan 1970 00:00:00 GMT'
-            },
-            cache: 'no-store'
-        });
-        
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-        
-        const buffer = await response.arrayBuffer();
-        const decoder = new TextDecoder('utf-8');
-        return decoder.decode(buffer);
-    }
-
-    // Метод 2: Парсинг HTML страницы GitHub
-    async function fetchFromGitHubHTML() {
-        const timestamp = Date.now();
-        const randomParam = Math.random().toString(36).substring(7);
-        const fetchUrl = `${UPDATE_CONFIG.GITHUB_HTML_URL}?v=${timestamp}&_=${randomParam}&t=${Date.now()}`;
-        
-        const response = await fetch(fetchUrl, {
-            method: 'GET',
-            headers: {
-                'Cache-Control': 'no-cache, no-store, must-revalidate',
-                'Pragma': 'no-cache',
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-            },
-            cache: 'no-store'
-        });
-        
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-        
-        const html = await response.text();
-        return extractScriptFromGitHubHTML(html);
-    }
-
-    // Извлечение кода из HTML GitHub
-    function extractScriptFromGitHubHTML(html) {
-        try {
-            // GitHub может использовать разные структуры, пробуем несколько вариантов
-            
-            // Вариант 1: Ищем в <table class="highlight">
-            let tableMatch = html.match(/<table[^>]*class="[^"]*highlight[^"]*"[^>]*>(.*?)<\/table>/s);
-            
-            // Вариант 2: Ищем просто по blob-code
-            if (!tableMatch) {
-                tableMatch = html.match(/<div[^>]*class="[^"]*highlight[^"]*"[^>]*>(.*?)<\/div>/s);
-            }
-            
-            if (!tableMatch) {
-                throw new Error('Не найден контейнер с кодом');
-            }
-            
-            const content = tableMatch[1];
-            
-            // Извлекаем строки кода
-            const linePattern = /<td[^>]*class="[^"]*blob-code[^"]*"[^>]*>(.*?)<\/td>/gs;
-            const lineMatches = [...content.matchAll(linePattern)];
-            
-            if (lineMatches.length === 0) {
-                throw new Error('Не найдены строки кода');
-            }
-            
-            let scriptLines = [];
-            for (const match of lineMatches) {
-                let line = match[1];
-                // Убираем HTML теги
-                line = line.replace(/<[^>]*>/g, '');
-                // Декодируем HTML сущности
-                line = decodeHTMLEntities(line);
-                scriptLines.push(line);
-            }
-            
-            const scriptContent = scriptLines.join('\n');
-            
-            // Проверяем валидность
-            if (!scriptContent.includes('==UserScript==') || !scriptContent.includes('WMS Container Override')) {
-                throw new Error('Извлеченный контент не является нашим скриптом');
-            }
-            
-            console.log('✅ Код успешно извлечен из HTML GitHub');
-            return scriptContent;
-            
-        } catch (error) {
-            throw new Error(`Ошибка парсинга HTML: ${error.message}`);
-        }
-    }
-
-    // Декодирование HTML сущностей
-    function decodeHTMLEntities(text) {
-        const entities = {
-            '&amp;': '&',
-            '&lt;': '<',
-            '&gt;': '>',
-            '&quot;': '"',
-            '&#x27;': "'",
-            '&#x2F;': '/',
-            '&#39;': "'",
-            '&nbsp;': ' ',
-            '&#x60;': '`'
-        };
-        
-        return text.replace(/&[#\w]+;/g, function(entity) {
-            return entities[entity] || entity;
-        });
-    }
-
-    // Метод 3: GitHub API
-    async function fetchFromGitHubAPI() {
-        const timestamp = Date.now();
-        const randomParam = Math.random().toString(36).substring(7);
-        const fetchUrl = `${UPDATE_CONFIG.GITHUB_API_URL}?v=${timestamp}&_=${randomParam}`;
-        
-        const response = await fetch(fetchUrl, {
-            method: 'GET',
-            headers: {
-                'Accept': 'application/vnd.github.v3+json',
-                'Cache-Control': 'no-cache',
-                'User-Agent': 'WMS-Script-Updater/1.0'
-            },
-            cache: 'no-store'
-        });
-        
-        if (!response.ok) {
-            throw new Error(`GitHub API error: ${response.status}`);
-        }
-        
-        const data = await response.json();
-        
-        if (!data.content || data.encoding !== 'base64') {
-            throw new Error('Неверный формат ответа GitHub API');
-        }
-        
-        // Декодируем base64
-        const binaryString = atob(data.content.replace(/\s/g, ''));
-        const bytes = new Uint8Array(binaryString.length);
-        for (let i = 0; i < binaryString.length; i++) {
-            bytes[i] = binaryString.charCodeAt(i);
-        }
-        
-        const decoder = new TextDecoder('utf-8');
-        const scriptContent = decoder.decode(bytes);
-        
-        console.log('✅ Код получен через GitHub API');
-        return scriptContent;
-    }
-
-    // Обработка и установка скрипта
-    async function processAndInstallScript(scriptContent, methodName) {
-        try {
-            console.log(`✅ Скрипт загружен через: ${methodName}`);
-            console.log(`📊 Размер скрипта: ${scriptContent.length} символов`);
-            
-            // Модифицируем версию
-            const modifiedScript = forceUpdateVersion(scriptContent, methodName);
-            
-            // Создаем blob с правильной кодировкой
-            const blob = new Blob([modifiedScript], { 
-                type: 'text/javascript; charset=utf-8' 
-            });
-            const blobUrl = URL.createObjectURL(blob);
-            
-            // Открываем для установки
-            window.open(blobUrl, '_blank');
-            
-            console.log('✅ Скрипт готов к установке');
-            showNotification(`Скрипт загружен через ${methodName}! Нажмите "Установить" в новой вкладке`, 'success');
-            
-            // Показываем инструкции
-            setTimeout(() => {
-                showSimpleInstructions();
-            }, 1000);
-            
-            // Удаляем blob через минуту
-            setTimeout(() => {
-                URL.revokeObjectURL(blobUrl);
-            }, 60000);
-            
-        } catch (error) {
-            throw new Error(`Ошибка обработки скрипта: ${error.message}`);
-        }
-    }
-
-    // Улучшенная функция модификации версии
-    function forceUpdateVersion(scriptContent, methodName = 'неизвестно') {
-        try {
-            const timestamp = Date.now();
-            const newVersion = `3.0.${timestamp}`;
-            
-            let modified = scriptContent;
-            
-            // Заменяем @version
-            modified = modified.replace(
-                /@version\s+[\d.]+/g, 
-                `@version      ${newVersion}`
-            );
-            
-            // Заменяем CURRENT_VERSION
-            modified = modified.replace(
-                /const\s+CURRENT_VERSION\s*=\s*['"`][\d.]+['"`]/g,
-                `const CURRENT_VERSION = '${newVersion}'`
-            );
-            
-            // Добавляем комментарий об обновлении
-            const currentDate = new Date().toLocaleString('ru-RU', {
-                year: 'numeric',
-                month: '2-digit', 
-                day: '2-digit',
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit'
-            });
-            
-            const updateComment = `
-// ========== АВТООБНОВЛЕНИЕ ${currentDate} ==========
-// Скрипт автоматически обновлен до версии ${newVersion}
-// Метод загрузки: ${methodName}
-// Источник: GitHub (с обходом кэширования)
-// ================================================================
-
-`;
-            
-            const headerEnd = modified.indexOf('==/UserScript==') + '==/UserScript=='.length;
-            if (headerEnd > 0) {
-                modified = modified.substring(0, headerEnd) + '\n' + updateComment + modified.substring(headerEnd);
-            }
-            
-            console.log(`📝 Версия изменена на: ${newVersion}`);
-            return modified;
-            
-        } catch (error) {
-            throw new Error(`Ошибка модификации версии: ${error.message}`);
-        }
-    }
-
-    // Простые инструкции для пользователя
-    function showSimpleInstructions() {
-        const modal = document.createElement('div');
-        modal.style.cssText = `
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.8); z-index: 99999; display: flex;
-            align-items: center; justify-content: center; font-family: Arial, sans-serif;
-        `;
-        
-        modal.innerHTML = `
-            <div style="background: white; border-radius: 10px; padding: 30px; max-width: 400px; width: 90%; box-shadow: 0 10px 30px rgba(0,0,0,0.3); text-align: center;">
-                <div style="font-size: 20px; font-weight: bold; color: #4CAF50; margin-bottom: 15px;">
-                    🚀 Скрипт готов к установке!
-                </div>
-                
-                <div style="margin-bottom: 20px; font-size: 14px; color: #333; line-height: 1.5;">
-                    В новой вкладке Tampermonkey покажет кнопку <strong>"Установить"</strong> или <strong>"Переустановить"</strong>
-                </div>
-                
-                <div style="margin-bottom: 20px; padding: 15px; background: #e8f5e8; border-radius: 5px; font-size: 13px; color: #2e7d32;">
-                    <strong>Что делать:</strong><br>
-                    1️⃣ Нажмите <strong>"Установить"</strong><br>
-                    2️⃣ Закройте вкладку обновления<br>
-                    3️⃣ Перезагрузите эту страницу (F5)
-                </div>
-                
-                <button onclick="this.closest('div').parentElement.remove()" 
-                        style="padding: 12px 24px; background: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 14px; font-weight: bold;">
-                    👍 Понятно
-                </button>
-            </div>
-        `;
-        
-        document.body.appendChild(modal);
-        
-        // Автоматическое закрытие через 20 секунд
-        setTimeout(() => {
-            if (modal.parentElement) {
-                modal.remove();
-            }
-        }, 20000);
-    }
-
-    // Инструкции для ручного обновления
-    function showManualUpdateInstructions() {
-        const modal = document.createElement('div');
-        modal.style.cssText = `
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.8); z-index: 99999; display: flex;
-            align-items: center; justify-content: center; font-family: Arial, sans-serif;
-        `;
-        
-        modal.innerHTML = `
-            <div style="background: white; border-radius: 10px; padding: 30px; max-width: 450px; width: 90%; box-shadow: 0 10px 30px rgba(0,0,0,0.3); text-align: center;">
-                <div style="font-size: 20px; font-weight: bold; color: #FF9800; margin-bottom: 15px;">
-                    📥 Ручное обновление
-                </div>
-                
-                <div style="margin-bottom: 20px; font-size: 14px; color: #333; line-height: 1.5;">
-                    Автообновление не сработало. В открывшейся вкладке GitHub:
-                </div>
-                
-                <div style="margin-bottom: 20px; padding: 15px; background: #fff3e0; border-radius: 5px; font-size: 13px; color: #e65100; text-align: left;">
-                    <strong>Шаги:</strong><br>
-                    1️⃣ Найдите кнопку "Raw" справа сверху<br>
-                    2️⃣ Нажмите на неё<br>
-                    3️⃣ Выделите весь код (Ctrl+A)<br>
-                    4️⃣ Скопируйте (Ctrl+C)<br>
-                    5️⃣ Замените код в Tampermonkey<br>
-                    6️⃣ Сохраните (Ctrl+S)
-                </div>
-                
-                <button onclick="this.closest('div').parentElement.remove()" 
-                        style="padding: 12px 24px; background: #FF9800; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 14px; font-weight: bold;">
-                    👍 Понятно
-                </button>
-            </div>
-        `;
-        
-        document.body.appendChild(modal);
-        
-        setTimeout(() => {
-            if (modal.parentElement) {
-                modal.remove();
-            }
-        }, 30000);
-    }
-
-    // ========== КОНФИГУРАЦИЯ ==========
+    // ========== КОНФИГУРАЦИЯ WMS ==========
 
     // XPath пути к элементам
     const DIRECTION_XPATH = '/html/body/div/div/div/div[1]/main/div/div/div/div[5]/div/b[2]';
@@ -434,7 +52,7 @@
     // Пресеты для всех столов комплектации (ВСТРОЕННЫЕ ДАННЫЕ) - по буквенным названиям
     const TABLE_PRESETS = {
         "Стол 12": {
-            "Парнас": "Параша",
+            "Парнас": "гавна",
             "Международная": "2---Международная",
             "Всеволожск": "3---Всеволожск",
             "Красное": "4---Красное Село",
@@ -556,19 +174,382 @@
         lastUpdate: 0
     };
 
+    // ========== GITHUB API КЛАСС ==========
+
+    class GitHubAPIUpdater {
+        constructor(config) {
+            this.config = config;
+            this.cache = new Map();
+            this.rateLimit = {
+                remaining: 60,
+                reset: Date.now() + 3600000,
+                limit: 60
+            };
+        }
+
+        // Получить информацию о файле через API
+        async getFileInfo() {
+            const url = `${this.config.apiBase}/repos/${this.config.owner}/${this.config.repo}/contents/${this.config.scriptPath}`;
+
+            console.log('🔍 Получаем информацию о файле через GitHub API...');
+
+            const response = await this.makeAPIRequest(url);
+
+            if (!response.ok) {
+                throw new Error(`GitHub API error: ${response.status} - ${response.statusText}`);
+            }
+
+            const data = await response.json();
+            this.updateRateLimit(response.headers);
+
+            return {
+                sha: data.sha,
+                size: data.size,
+                downloadUrl: data.download_url,
+                content: data.content,
+                encoding: data.encoding,
+                lastModified: data.last_modified || new Date().toISOString()
+            };
+        }
+
+        // Получить содержимое файла
+        async getFileContent() {
+            const fileInfo = await this.getFileInfo();
+
+            if (fileInfo.encoding === 'base64') {
+                return this.decodeBase64Content(fileInfo.content);
+            } else {
+                throw new Error(`Неподдерживаемая кодировка: ${fileInfo.encoding}`);
+            }
+        }
+
+        // Декодировать base64 контент
+        decodeBase64Content(base64Content) {
+            try {
+                const cleanBase64 = base64Content.replace(/\s/g, '');
+                const binaryString = atob(cleanBase64);
+                const bytes = new Uint8Array(binaryString.length);
+                for (let i = 0; i < binaryString.length; i++) {
+                    bytes[i] = binaryString.charCodeAt(i);
+                }
+                const decoder = new TextDecoder('utf-8');
+                return decoder.decode(bytes);
+            } catch (error) {
+                throw new Error(`Ошибка декодирования base64: ${error.message}`);
+            }
+        }
+
+        // Выполнить запрос к API
+        async makeAPIRequest(url, options = {}) {
+            const defaultOptions = {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/vnd.github.v3+json',
+                    'User-Agent': 'WMS-Script-Updater/4.0',
+                    'Cache-Control': 'no-cache',
+                    'If-None-Match': ''
+                },
+                cache: 'no-store',
+                ...options
+            };
+
+            const separator = url.includes('?') ? '&' : '?';
+            const cacheUrl = `${url}${separator}_=${Date.now()}&rand=${Math.random().toString(36).substring(7)}`;
+
+            const response = await fetch(cacheUrl, defaultOptions);
+            return response;
+        }
+
+        // Обновить информацию о лимитах API
+        updateRateLimit(headers) {
+            if (headers.get('x-ratelimit-remaining')) {
+                this.rateLimit.remaining = parseInt(headers.get('x-ratelimit-remaining'));
+                this.rateLimit.limit = parseInt(headers.get('x-ratelimit-limit'));
+                this.rateLimit.reset = parseInt(headers.get('x-ratelimit-reset')) * 1000;
+            }
+            console.log(`🔢 GitHub API лимит: ${this.rateLimit.remaining}/${this.rateLimit.limit}`);
+        }
+
+        // Сравнить версии
+        async compareVersions() {
+            try {
+                const content = await this.getFileContent();
+                const remoteVersion = this.extractVersion(content);
+
+                return {
+                    current: CURRENT_VERSION,
+                    remote: remoteVersion,
+                    hasUpdate: this.isNewerVersion(remoteVersion, CURRENT_VERSION),
+                    content: content
+                };
+            } catch (error) {
+                throw new Error(`Ошибка сравнения версий: ${error.message}`);
+            }
+        }
+
+        // Извлечь версию из скрипта
+        extractVersion(scriptContent) {
+            const versionMatch = scriptContent.match(/@version\s+([\d.]+)/);
+            return versionMatch ? versionMatch[1] : 'неизвестно';
+        }
+
+        // Проверить, является ли версия более новой
+        isNewerVersion(remote, current) {
+            if (remote === 'неизвестно') return false;
+
+            const remoteParts = remote.split('.').map(Number);
+            const currentParts = current.split('.').map(Number);
+
+            for (let i = 0; i < Math.max(remoteParts.length, currentParts.length); i++) {
+                const r = remoteParts[i] || 0;
+                const c = currentParts[i] || 0;
+
+                if (r > c) return true;
+                if (r < c) return false;
+            }
+
+            return false;
+        }
+    }
+
+    // ========== СИСТЕМА ОБНОВЛЕНИЙ ==========
+
+    class ScriptUpdater {
+        constructor() {
+            this.github = new GitHubAPIUpdater(GITHUB_CONFIG);
+        }
+
+        // Главная функция обновления
+        async updateScript() {
+            console.log('🚀 Начинаем обновление скрипта...');
+            showNotification('Проверяем обновления через GitHub API...', 'info');
+
+            try {
+                // Пробуем GitHub API
+                const result = await this.updateViaGitHubAPI();
+                if (result.success) {
+                    return result;
+                }
+            } catch (error) {
+                console.warn('❌ GitHub API недоступен:', error.message);
+                showNotification('GitHub API недоступен, используем резервные методы...', 'info');
+            }
+
+            // Резервные методы
+            return await this.tryFallbackMethods();
+        }
+
+        // Обновление через GitHub API
+        async updateViaGitHubAPI() {
+            const comparison = await this.github.compareVersions();
+
+            console.log(`📊 Версии: текущая ${comparison.current}, удаленная ${comparison.remote}`);
+
+            if (!comparison.hasUpdate) {
+                showNotification(`У вас актуальная версия ${comparison.current}`, 'success');
+                return { success: true, updated: false, version: comparison.current };
+            }
+
+            const installResult = await this.installUpdate(comparison.content, `GitHub API v${comparison.remote}`);
+
+            return {
+                success: installResult,
+                updated: installResult,
+                version: comparison.remote,
+                method: 'GitHub API'
+            };
+        }
+
+        // Резервные методы
+        async tryFallbackMethods() {
+            const methods = [
+                { name: 'Raw URL', func: this.updateViaRawURL.bind(this) },
+                { name: 'HTML Parsing', func: this.updateViaHTMLParsing.bind(this) }
+            ];
+
+            for (let i = 0; i < methods.length; i++) {
+                try {
+                    console.log(`🔄 Пробуем метод ${i + 1}: ${methods[i].name}...`);
+                    showNotification(`Метод ${i + 1}: ${methods[i].name}...`, 'info');
+
+                    const scriptContent = await methods[i].func();
+
+                    if (this.validateScript(scriptContent)) {
+                        const installResult = await this.installUpdate(scriptContent, methods[i].name);
+                        return { success: installResult, updated: installResult, method: methods[i].name };
+                    }
+                } catch (error) {
+                    console.warn(`❌ Метод ${i + 1} неудачен:`, error.message);
+                    if (i < methods.length - 1) {
+                        await new Promise(resolve => setTimeout(resolve, 1000));
+                    }
+                }
+            }
+
+            showNotification('Автообновление неудачно. Открываем GitHub...', 'error');
+            window.open(`${GITHUB_CONFIG.webBase}/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}`, '_blank');
+            return { success: false, updated: false };
+        }
+
+        // Резервный метод: Raw URL
+        async updateViaRawURL() {
+            const url = `${GITHUB_CONFIG.rawBase}/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/${GITHUB_CONFIG.branch}/${GITHUB_CONFIG.scriptPath}`;
+            const fetchUrl = `${url}?v=${Date.now()}&_=${Math.random().toString(36).substring(7)}`;
+
+            const response = await fetch(fetchUrl, {
+                method: 'GET',
+                headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
+                cache: 'no-store'
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            return await response.text();
+        }
+
+        // Резервный метод: HTML парсинг
+        async updateViaHTMLParsing() {
+            const url = `${GITHUB_CONFIG.webBase}/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/blob/${GITHUB_CONFIG.branch}/${GITHUB_CONFIG.scriptPath}`;
+            const fetchUrl = `${url}?t=${Date.now()}`;
+
+            const response = await fetch(fetchUrl, {
+                headers: { 'Cache-Control': 'no-cache' },
+                cache: 'no-store'
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            const html = await response.text();
+            return this.extractScriptFromHTML(html);
+        }
+
+        // Валидация скрипта
+        validateScript(content) {
+            return content &&
+                   content.length > 5000 &&
+                   content.includes('==UserScript==') &&
+                   content.includes('WMS Container Override');
+        }
+
+        // Извлечь скрипт из HTML
+        extractScriptFromHTML(html) {
+            const tableMatch = html.match(/<table[^>]*class="[^"]*highlight[^"]*"[^>]*>(.*?)<\/table>/s);
+            if (!tableMatch) {
+                throw new Error('Не найден контейнер с кодом');
+            }
+
+            const content = tableMatch[1];
+            const linePattern = /<td[^>]*class="[^"]*blob-code[^"]*"[^>]*>(.*?)<\/td>/gs;
+            const lineMatches = [...content.matchAll(linePattern)];
+
+            const scriptLines = lineMatches.map(match => {
+                let line = match[1].replace(/<[^>]*>/g, '');
+                return this.decodeHTMLEntities(line);
+            });
+
+            return scriptLines.join('\n');
+        }
+
+        // Декодирование HTML сущностей
+        decodeHTMLEntities(text) {
+            const entities = {
+                '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"',
+                '&#x27;': "'", '&#x2F;': '/', '&#39;': "'", '&nbsp;': ' ', '&#x60;': '`'
+            };
+            return text.replace(/&[#\w]+;/g, entity => entities[entity] || entity);
+        }
+
+        // Установить обновление
+        async installUpdate(scriptContent, methodName) {
+            try {
+                console.log(`✅ Скрипт получен через: ${methodName}`);
+
+                const modifiedScript = this.prepareScriptForInstall(scriptContent, methodName);
+                const blob = new Blob([modifiedScript], { type: 'text/javascript; charset=utf-8' });
+                const blobUrl = URL.createObjectURL(blob);
+
+                window.open(blobUrl, '_blank');
+
+                showNotification(`Скрипт готов к установке! (${methodName})`, 'success');
+                this.showInstallInstructions();
+
+                setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+                return true;
+            } catch (error) {
+                throw new Error(`Ошибка установки: ${error.message}`);
+            }
+        }
+
+        // Подготовить скрипт для установки
+        prepareScriptForInstall(scriptContent, methodName) {
+            const timestamp = Date.now();
+            const newVersion = `4.0.${timestamp}`;
+
+            let modified = scriptContent;
+            modified = modified.replace(/@version\s+[\d.]+/g, `@version      ${newVersion}`);
+            modified = modified.replace(/const\s+CURRENT_VERSION\s*=\s*['"`][\d.]+['"`]/g, `const CURRENT_VERSION = '${newVersion}'`);
+
+            const updateComment = `
+// ========== ОБНОВЛЕНО ${new Date().toLocaleString('ru-RU')} ==========
+// Версия: ${newVersion}
+// Метод: ${methodName}
+// ================================================================
+
+`;
+
+            const headerEnd = modified.indexOf('==/UserScript==') + '==/UserScript=='.length;
+            if (headerEnd > 0) {
+                modified = modified.substring(0, headerEnd) + '\n' + updateComment + modified.substring(headerEnd);
+            }
+
+            return modified;
+        }
+
+        // Показать инструкции по установке
+        showInstallInstructions() {
+            const modal = document.createElement('div');
+            modal.style.cssText = `
+                position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+                background: rgba(0,0,0,0.8); z-index: 99999; display: flex;
+                align-items: center; justify-content: center; font-family: Arial, sans-serif;
+            `;
+
+            modal.innerHTML = `
+                <div style="background: white; border-radius: 10px; padding: 30px; max-width: 400px; width: 90%; text-align: center;">
+                    <div style="font-size: 20px; font-weight: bold; color: #4CAF50; margin-bottom: 15px;">
+                        🚀 Обновление готово!
+                    </div>
+                    <div style="margin-bottom: 20px; font-size: 14px; color: #333;">
+                        Нажмите <strong>"Переустановить"</strong> в новой вкладке
+                    </div>
+                    <button onclick="this.closest('div').parentElement.remove()"
+                            style="padding: 12px 24px; background: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer;">
+                        👍 Понял
+                    </button>
+                </div>
+            `;
+
+            document.body.appendChild(modal);
+            setTimeout(() => modal.remove(), 20000);
+        }
+    }
+
     // ========== УПРАВЛЕНИЕ НАСТРОЙКАМИ ==========
 
     // Проверить и обновить пресеты при обновлении скрипта
     function checkAndUpdatePresets() {
         const lastVersion = localStorage.getItem('wms_last_version');
-        
+
         if (lastVersion !== CURRENT_VERSION) {
             console.log(`🔄 Обнаружено обновление: ${lastVersion || 'неизвестно'} → ${CURRENT_VERSION}`);
-            
-            // Загружаем текущие пользовательские пресеты
+
             const savedPresets = localStorage.getItem('wms_user_presets');
             let currentUserPresets = {};
-            
+
             if (savedPresets) {
                 try {
                     currentUserPresets = JSON.parse(savedPresets);
@@ -576,111 +557,81 @@
                     console.error('Ошибка парсинга пресетов:', e);
                 }
             }
-            
-            // Обновляем встроенные пресеты, сохраняя пользовательские изменения
+
             Object.keys(TABLE_PRESETS).forEach(tableName => {
                 const userPreset = currentUserPresets[tableName];
                 const builtinPreset = TABLE_PRESETS[tableName];
-                
+
                 if (userPreset) {
-                    // Если у пользователя есть этот пресет, обновляем только недостающие направления
-                    const updatedPreset = { ...builtinPreset }; // Начинаем с актуальных встроенных данных
-                    
-                    // Добавляем пользовательские изменения/дополнения
+                    const updatedPreset = { ...builtinPreset };
                     Object.keys(userPreset).forEach(locationName => {
-                        // Если направление есть в встроенном пресете, берем встроенное значение
-                        // Если это пользовательское направление - сохраняем его
                         if (!builtinPreset[locationName]) {
                             updatedPreset[locationName] = userPreset[locationName];
-                            console.log(`📝 Сохранено пользовательское направление: ${tableName}["${locationName}"]`);
                         }
                     });
-                    
                     currentUserPresets[tableName] = updatedPreset;
-                    console.log(`✅ Обновлен пресет: ${tableName}`);
                 } else {
-                    // Если пресета у пользователя нет - добавляем встроенный
                     currentUserPresets[tableName] = { ...builtinPreset };
-                    console.log(`➕ Добавлен новый пресет: ${tableName}`);
                 }
             });
-            
-            // Сохраняем обновленные пресеты
+
             userPresets = currentUserPresets;
             savePresets();
-            
-            // Сохраняем текущую версию
             localStorage.setItem('wms_last_version', CURRENT_VERSION);
-            
-            console.log(`🎉 Пресеты обновлены до версии ${CURRENT_VERSION}`);
-            
-            // Показываем уведомление пользователю
+
             setTimeout(() => {
                 showNotification(`Пресеты обновлены до версии ${CURRENT_VERSION}!`, 'success');
             }, 2000);
-            
-            return true; // Обновление произошло
+
+            return true;
         }
-        
-        return false; // Обновления не было
+
+        return false;
     }
 
-    // Загрузить настройки из localStorage (если есть)
+    // Загрузить настройки
     function loadSettings() {
-        // Сначала проверяем и обновляем пресеты при необходимости
         const wasUpdated = checkAndUpdatePresets();
-        
+
         if (!wasUpdated) {
-            // Если обновления не было, загружаем как обычно
             const savedPresets = localStorage.getItem('wms_user_presets');
             if (savedPresets) {
                 try {
                     userPresets = JSON.parse(savedPresets);
-                    console.log('Загружены пользовательские пресеты:', Object.keys(userPresets));
                 } catch (e) {
-                    console.error('Ошибка загрузки пресетов:', e);
                     initializeDefaultPresets();
                 }
             } else {
-                // Первый запуск - копируем встроенные пресеты
-                console.log('Первый запуск - инициализируем пресеты из встроенных данных');
                 initializeDefaultPresets();
             }
         }
 
-        // Загрузить текущий активный пресет
         const savedCurrentPreset = localStorage.getItem('wms_current_preset');
         if (savedCurrentPreset && userPresets[savedCurrentPreset]) {
             currentPreset = savedCurrentPreset;
-            console.log('Загружен активный пресет:', currentPreset);
         }
 
-        // Загрузить размер шрифта
         const savedFontSize = localStorage.getItem('wms_font_size');
         if (savedFontSize) {
             LARGE_FONT_SIZE = savedFontSize;
-            console.log('Загружен размер шрифта:', LARGE_FONT_SIZE);
         }
     }
 
-    // Инициализация пресетов из встроенных данных
+    // Инициализация пресетов
     function initializeDefaultPresets() {
-        userPresets = JSON.parse(JSON.stringify(TABLE_PRESETS)); // Глубокая копия
+        userPresets = JSON.parse(JSON.stringify(TABLE_PRESETS));
         savePresets();
-        console.log('Инициализированы встроенные пресеты:', Object.keys(userPresets));
     }
 
-    // Сохранить настройки в localStorage
+    // Сохранить настройки
     function saveSettings() {
         localStorage.setItem('wms_font_size', LARGE_FONT_SIZE);
         localStorage.setItem('wms_current_preset', currentPreset);
-        console.log('Основные настройки сохранены');
     }
 
     // Сохранить пресеты
     function savePresets() {
         localStorage.setItem('wms_user_presets', JSON.stringify(userPresets));
-        console.log('Пользовательские пресеты сохранены');
     }
 
     // Получить текущие маппинги
@@ -688,279 +639,10 @@
         return userPresets[currentPreset] || {};
     }
 
-    // ========== ФУНКЦИИ ДЛЯ ПОЛЬЗОВАТЕЛЬСКИХ СТОЛОВ ==========
-
-    // Создать новый пользовательский стол
-    function createCustomTable(tableName) {
-        if (!tableName || tableName.trim() === '') {
-            return { success: false, message: 'Имя стола не может быть пустым' };
-        }
-
-        const trimmedName = tableName.trim();
-
-        // Проверить, что имя не занято
-        if (userPresets[trimmedName]) {
-            return { success: false, message: 'Стол с таким именем уже существует' };
-        }
-
-        // Создать пустой стол
-        userPresets[trimmedName] = {};
-        savePresets();
-
-        console.log(`Создан новый стол: "${trimmedName}"`);
-        return { success: true, message: `Стол "${trimmedName}" создан успешно` };
-    }
-
-    // Удалить пользовательский стол
-    function deleteCustomTable(tableName) {
-        // Нельзя удалять встроенные столы
-        if (TABLE_PRESETS[tableName]) {
-            return { success: false, message: 'Нельзя удалить встроенный стол' };
-        }
-
-        if (!userPresets[tableName]) {
-            return { success: false, message: 'Стол не найден' };
-        }
-
-        // Если удаляем активный стол, переключаемся на стол 18
-        if (currentPreset === tableName) {
-            currentPreset = 'Стол 18';
-            saveSettings();
-        }
-
-        delete userPresets[tableName];
-        savePresets();
-
-        console.log(`Удален стол: "${tableName}"`);
-        return { success: true, message: `Стол "${tableName}" удален` };
-    }
-
-    // Переименовать стол
-    function renameTable(oldName, newName) {
-        if (!newName || newName.trim() === '') {
-            return { success: false, message: 'Новое имя не может быть пустым' };
-        }
-
-        const trimmedNewName = newName.trim();
-
-        // Нельзя переименовывать встроенные столы
-        if (TABLE_PRESETS[oldName]) {
-            return { success: false, message: 'Нельзя переименовать встроенный стол' };
-        }
-
-        if (!userPresets[oldName]) {
-            return { success: false, message: 'Исходный стол не найден' };
-        }
-
-        if (userPresets[trimmedNewName]) {
-            return { success: false, message: 'Стол с новым именем уже существует' };
-        }
-
-        // Копируем данные под новым именем
-        userPresets[trimmedNewName] = { ...userPresets[oldName] };
-        delete userPresets[oldName];
-
-        // Если переименовываем активный стол
-        if (currentPreset === oldName) {
-            currentPreset = trimmedNewName;
-            saveSettings();
-        }
-
-        savePresets();
-
-        console.log(`Стол переименован: "${oldName}" → "${trimmedNewName}"`);
-        return { success: true, message: `Стол переименован в "${trimmedNewName}"` };
-    }
-
-    // Копировать стол
-    function copyTable(sourceName, newName) {
-        if (!newName || newName.trim() === '') {
-            return { success: false, message: 'Имя копии не может быть пустым' };
-        }
-
-        const trimmedNewName = newName.trim();
-
-        if (!userPresets[sourceName]) {
-            return { success: false, message: 'Исходный стол не найден' };
-        }
-
-        if (userPresets[trimmedNewName]) {
-            return { success: false, message: 'Стол с таким именем уже существует' };
-        }
-
-        // Создаем глубокую копию
-        userPresets[trimmedNewName] = JSON.parse(JSON.stringify(userPresets[sourceName]));
-        savePresets();
-
-        console.log(`Стол скопирован: "${sourceName}" → "${trimmedNewName}"`);
-        return { success: true, message: `Создана копия "${trimmedNewName}"` };
-    }
-
-    // Получить список всех столов с дополнительной информацией
-    function getAllTablesInfo() {
-        const tables = {};
-
-        Object.keys(userPresets).forEach(tableName => {
-            const isBuiltIn = TABLE_PRESETS.hasOwnProperty(tableName);
-            const mappingsCount = Object.keys(userPresets[tableName]).length;
-            const isModified = isBuiltIn ?
-                JSON.stringify(TABLE_PRESETS[tableName]) !== JSON.stringify(userPresets[tableName]) :
-                false;
-
-            tables[tableName] = {
-                isBuiltIn,
-                mappingsCount,
-                isModified,
-                isActive: tableName === currentPreset
-            };
-        });
-
-        return tables;
-    }
-
-    // ========== ОБРАБОТКА НАЗВАНИЙ НАПРАВЛЕНИЙ ==========
-
-    // Функция поиска соответствий
-    function findMappingByLocationName(fullDirection, mappings) {
-        if (!fullDirection || !mappings) {
-            return null;
-        }
-
-        // Нормализуем направление для поиска
-        const normalizedDirection = fullDirection.toLowerCase().trim();
-
-        // Сначала ищем точные совпадения названий из маппинга в полном направлении
-        for (const [mappingKey, mappingValue] of Object.entries(mappings)) {
-            const normalizedKey = mappingKey.toLowerCase().trim();
-
-            // Проверяем, содержится ли название из маппинга в полном направлении
-            if (normalizedDirection.includes(normalizedKey)) {
-                console.log(`✅ НАЙДЕНО: "${mappingKey}" → ${mappingValue}`);
-                return mappingValue;
-            }
-        }
-
-        // Если точных совпадений нет, ищем частичные
-        for (const [mappingKey, mappingValue] of Object.entries(mappings)) {
-            const normalizedKey = mappingKey.toLowerCase().trim();
-
-            // Разбиваем на слова и ищем частичные совпадения
-            const keyWords = normalizedKey.split(/\s+/);
-            const directionWords = normalizedDirection.split(/\s+/);
-
-            // Если хотя бы одно слово из ключа есть в направлении
-            let hasPartialMatch = false;
-            for (const keyWord of keyWords) {
-                if (keyWord.length >= 3) { // Минимум 3 символа для поиска
-                    for (const dirWord of directionWords) {
-                        if (dirWord.includes(keyWord) || keyWord.includes(dirWord)) {
-                            hasPartialMatch = true;
-                            break;
-                        }
-                    }
-                }
-                if (hasPartialMatch) break;
-            }
-
-            if (hasPartialMatch) {
-                console.log(`🔍 ЧАСТИЧНОЕ: "${mappingKey}" ~ "${fullDirection}" → ${mappingValue}`);
-                return mappingValue;
-            }
-        }
-
-        return null;
-    }
-
-    // Функция извлечения названия (как fallback)
-    function extractLocationName(fullDirection) {
-        if (!fullDirection) return null;
-
-        // Убираем код в скобках в начале: (А-12) или (Б-15) и т.д.
-        let cleaned = fullDirection.replace(/^\([^)]+\)\s*/, '');
-
-        // Убираем номера в конце: ---123--- или --456-- и т.д.
-        cleaned = cleaned.replace(/---.*$/, '');
-        cleaned = cleaned.replace(/--.*$/, '');
-
-        // Убираем лишние пробелы
-        cleaned = cleaned.trim();
-
-        return cleaned || null;
-    }
-
-    // ========== РАБОТА С ПРЕСЕТАМИ ==========
-
-    // Переключиться на выбранный пресет
-    function switchToPreset(presetName) {
-        if (userPresets[presetName]) {
-            currentPreset = presetName;
-            saveSettings();
-            console.log(`Переключено на пресет: ${presetName}`);
-            return true;
-        }
-        return false;
-    }
-
-    // Добавить/изменить направление в текущем пресете
-    function addMappingToCurrentPreset(locationName, container) {
-        if (!userPresets[currentPreset]) {
-            userPresets[currentPreset] = {};
-        }
-        userPresets[currentPreset][locationName] = container;
-        savePresets();
-        console.log(`Добавлено в ${currentPreset}: "${locationName}" → ${container}`);
-    }
-
-    // Удалить направление из текущего пресета
-    function removeMappingFromCurrentPreset(locationName) {
-        if (userPresets[currentPreset] && userPresets[currentPreset][locationName]) {
-            delete userPresets[currentPreset][locationName];
-            savePresets();
-            console.log(`Удалено из ${currentPreset}: "${locationName}"`);
-            return true;
-        }
-        return false;
-    }
-
-    // Сбросить пресет к исходному состоянию
-    function resetPresetToDefault(presetName) {
-        if (TABLE_PRESETS[presetName]) {
-            userPresets[presetName] = JSON.parse(JSON.stringify(TABLE_PRESETS[presetName]));
-            savePresets();
-            console.log(`Пресет ${presetName} сброшен к исходному состоянию`);
-            return true;
-        }
-        return false;
-    }
-
-    // Получить информацию о пресетах
-    function getPresetsInfo() {
-        const info = {};
-        Object.keys(userPresets).forEach(presetName => {
-            const isBuiltIn = TABLE_PRESETS.hasOwnProperty(presetName);
-            const originalCount = isBuiltIn ? Object.keys(TABLE_PRESETS[presetName]).length : 0;
-            const currentCount = Object.keys(userPresets[presetName]).length;
-            const isModified = isBuiltIn ?
-                JSON.stringify(TABLE_PRESETS[presetName]) !== JSON.stringify(userPresets[presetName]) :
-                false;
-
-            info[presetName] = {
-                isBuiltIn,
-                original: originalCount,
-                current: currentCount,
-                isModified
-            };
-        });
-        return info;
-    }
-
     // ========== CSS СТИЛИ ==========
 
-    // Добавить CSS стили в head
     function injectCSS() {
         const styleId = 'wms-override-styles';
-
-        // Удалить существующие стили если есть
         const existingStyle = document.getElementById(styleId);
         if (existingStyle) {
             existingStyle.remove();
@@ -987,46 +669,28 @@
             }
 
             .wms-tab-button {
-                background: #f0f0f0;
-                border: 1px solid #ddd;
-                padding: 8px 12px;
-                margin: 2px;
-                border-radius: 4px;
-                cursor: pointer;
-                font-size: 11px;
+                background: #f0f0f0; border: 1px solid #ddd; padding: 8px 12px;
+                margin: 2px; border-radius: 4px; cursor: pointer; font-size: 11px;
                 transition: all 0.2s ease;
             }
 
-            .wms-tab-button:hover {
-                background: #e0e0e0;
-            }
-
-            .wms-tab-button.active {
-                background: #4CAF50;
-                color: white;
-                border-color: #4CAF50;
-            }
+            .wms-tab-button:hover { background: #e0e0e0; }
+            .wms-tab-button.active { background: #4CAF50; color: white; border-color: #4CAF50; }
 
             .wms-section {
-                border: 1px solid #ddd;
-                border-radius: 5px;
-                padding: 10px;
-                margin-bottom: 10px;
-                background: #f8f9fa;
+                border: 1px solid #ddd; border-radius: 5px; padding: 10px;
+                margin-bottom: 10px; background: #f8f9fa;
             }
         `;
 
         document.head.appendChild(style);
-        console.log('✨ CSS стили добавлены с размером шрифта:', LARGE_FONT_SIZE);
     }
 
     // ========== РАБОТА С XPATH ==========
 
-    // Получить элемент по XPath с кэшированием
     function getElementByXPath(xpath, useCache = true) {
         const now = Date.now();
 
-        // Проверяем кэш
         if (useCache && cachedElements.lastUpdate > 0 && (now - cachedElements.lastUpdate) < CACHE_LIFETIME) {
             if (xpath === DIRECTION_XPATH && cachedElements.direction) {
                 return cachedElements.direction;
@@ -1039,11 +703,9 @@
             }
         }
 
-        // Получаем элемент
         const result = document.evaluate(xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
         const element = result.singleNodeValue;
 
-        // Обновляем кэш
         if (element) {
             if (xpath === DIRECTION_XPATH) cachedElements.direction = element;
             if (xpath === CONTAINER_XPATH_1) cachedElements.container1 = element;
@@ -1054,41 +716,51 @@
         return element;
     }
 
-    // Сброс кэша
     function clearElementCache() {
-        cachedElements = {
-            direction: null,
-            container1: null,
-            container2: null,
-            lastUpdate: 0
-        };
-        console.log('🗑️ Кэш элементов очищен');
+        cachedElements = { direction: null, container1: null, container2: null, lastUpdate: 0 };
     }
 
-    // ========== ОСНОВНЫЕ ФУНКЦИИ ==========
+    // ========== ОСНОВНЫЕ ФУНКЦИИ WMS ==========
 
-    // Получить текущее направление
     function getCurrentDirection(useCache = true) {
         const directionElement = getElementByXPath(DIRECTION_XPATH, useCache);
         return directionElement ? directionElement.textContent.trim() : null;
     }
 
-    // Функция для увеличения шрифта в первом поле контейнера
+    function findMappingByLocationName(fullDirection, mappings) {
+        if (!fullDirection || !mappings) return null;
+
+        const normalizedDirection = fullDirection.toLowerCase().trim();
+
+        for (const [mappingKey, mappingValue] of Object.entries(mappings)) {
+            const normalizedKey = mappingKey.toLowerCase().trim();
+            if (normalizedDirection.includes(normalizedKey)) {
+                console.log(`✅ НАЙДЕНО: "${mappingKey}" → ${mappingValue}`);
+                return mappingValue;
+            }
+        }
+
+        return null;
+    }
+
+    function extractLocationName(fullDirection) {
+        if (!fullDirection) return null;
+        let cleaned = fullDirection.replace(/^\([^)]+\)\s*/, '');
+        cleaned = cleaned.replace(/---.*$/, '');
+        cleaned = cleaned.replace(/--.*$/, '');
+        return cleaned.trim() || null;
+    }
+
     function applyLargeFontToContainer1() {
         const containerElement1 = getElementByXPath(CONTAINER_XPATH_1);
         if (containerElement1) {
-            // Удалить класс если есть
             containerElement1.classList.remove('wms-large-container');
-
-            // Добавить класс с большим шрифтом
             containerElement1.classList.add('wms-large-container');
-
             return true;
         }
         return false;
     }
 
-    // Установить значение контейнера в оба поля
     function setContainer(newContainer) {
         console.log(`📦 Установка контейнера: ${newContainer}`);
 
@@ -1101,37 +773,26 @@
         containers.forEach(container => {
             const element = getElementByXPath(container.xpath);
             if (element) {
-                const containerValue = newContainer;
-                element.textContent = containerValue;
+                element.textContent = newContainer;
                 element.classList.add('wms-highlight');
-
-                console.log(`✅ ${container.name} установлен: ${containerValue}`);
                 successCount++;
             }
         });
 
         if (successCount > 0) {
-            // Применить увеличенный шрифт к первому контейнеру
-            setTimeout(() => {
-                applyLargeFontToContainer1();
-            }, 100);
-
-            console.log(`✅ Контейнер установлен в ${successCount} полях: ${newContainer}`);
+            setTimeout(() => applyLargeFontToContainer1(), 100);
             return true;
         }
         return false;
     }
 
-    // Основная функция проверки и замены
     function checkAndReplace(forced = false) {
         const currentDirection = getCurrentDirection(!forced);
         const currentMappings = getCurrentMappings();
 
         if (currentDirection) {
-            // Поиск в полном направлении
             let newContainer = findMappingByLocationName(currentDirection, currentMappings);
 
-            // Если не нашли, пробуем через извлечение
             if (!newContainer) {
                 const locationName = extractLocationName(currentDirection);
                 if (locationName) {
@@ -1155,7 +816,6 @@
         return false;
     }
 
-    // Быстрая проверка без подробного логирования
     function quickCheck() {
         const currentDirection = getCurrentDirection(true);
         const currentMappings = getCurrentMappings();
@@ -1172,7 +832,6 @@
 
             if (newContainer) {
                 const containerElement1 = getElementByXPath(CONTAINER_XPATH_1, true);
-
                 if (containerElement1) {
                     const currentContainer = containerElement1.textContent.trim();
                     if (currentContainer !== newContainer) {
@@ -1184,39 +843,9 @@
         return false;
     }
 
-    // ========== ДИАГНОСТИКА ==========
-
-    function diagnoseElements() {
-        console.log('=== ДИАГНОСТИКА ЭЛЕМЕНТОВ ===');
-
-        // Информация о версиях
-        const lastVersion = localStorage.getItem('wms_last_version');
-        console.log('Текущая версия скрипта:', CURRENT_VERSION);
-        console.log('Последняя сохраненная версия:', lastVersion || 'НЕ СОХРАНЕНА');
-
-        // Информация о пресетах
-        console.log('Текущий активный пресет:', currentPreset);
-        console.log('Количество направлений в активном пресете:', Object.keys(getCurrentMappings()).length);
-
-        // Проверка направления
-        const directionElement = getElementByXPath(DIRECTION_XPATH);
-        const fullDirection = directionElement ? directionElement.textContent.trim() : null;
-
-        console.log('Элемент направления:', directionElement);
-        console.log('Полное направление:', fullDirection || 'НЕ НАЙДЕНО');
-
-        // Проверка контейнеров
-        const containerElement1 = getElementByXPath(CONTAINER_XPATH_1);
-        const containerElement2 = getElementByXPath(CONTAINER_XPATH_2);
-
-        console.log('Контейнер 1:', containerElement1 ? containerElement1.textContent : 'НЕ НАЙДЕНО');
-        console.log('Контейнер 2:', containerElement2 ? containerElement2.textContent : 'НЕ НАЙДЕНО');
-    }
-
     // ========== УВЕДОМЛЕНИЯ ==========
 
     function showNotification(message, type = 'info') {
-        // Используем GM_notification если доступно
         if (typeof GM_notification !== 'undefined' && type !== 'error') {
             GM_notification({
                 title: 'WMS Container Override',
@@ -1225,33 +854,19 @@
             });
             return;
         }
-        
-        // Fallback к обычным уведомлениям
+
         const notification = document.createElement('div');
         notification.style.cssText = `
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            padding: 15px 20px;
+            position: fixed; top: 20px; right: 20px; padding: 15px 20px;
             background: ${type === 'success' ? '#4CAF50' : type === 'error' ? '#f44336' : '#2196F3'};
-            color: white;
-            border-radius: 5px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-            z-index: 10000;
-            font-family: Arial, sans-serif;
-            font-size: 14px;
-            max-width: 350px;
-            word-wrap: break-word;
+            color: white; border-radius: 5px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            z-index: 10000; font-family: Arial, sans-serif; font-size: 14px;
+            max-width: 350px; word-wrap: break-word;
         `;
         notification.textContent = message;
 
         document.body.appendChild(notification);
-
-        setTimeout(() => {
-            if (notification.parentNode) {
-                notification.parentNode.removeChild(notification);
-            }
-        }, type === 'error' ? 6000 : 4000);
+        setTimeout(() => notification.remove(), type === 'error' ? 6000 : 4000);
     }
 
     // ========== ИНТЕРФЕЙС УПРАВЛЕНИЯ ==========
@@ -1260,29 +875,15 @@
         const panel = document.createElement('div');
         panel.id = 'wms-control-panel';
         panel.style.cssText = `
-            position: fixed;
-            top: 10px;
-            left: 10px;
-            background: white;
-            border: 2px solid #ddd;
-            border-radius: 8px;
-            padding: 15px;
-            z-index: 9999;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-            font-family: Arial, sans-serif;
-            font-size: 12px;
-            max-width: 500px;
-            max-height: 80vh;
-            overflow-y: auto;
-            display: none;
+            position: fixed; top: 10px; left: 10px; background: white;
+            border: 2px solid #ddd; border-radius: 8px; padding: 15px;
+            z-index: 9999; box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            font-family: Arial, sans-serif; font-size: 12px;
+            max-width: 500px; max-height: 80vh; overflow-y: auto; display: none;
         `;
 
-        const tablesInfo = getAllTablesInfo();
-        const tablesSelectOptions = Object.keys(tablesInfo).map(tableName => {
-            const info = tablesInfo[tableName];
-            const suffix = info.isBuiltIn ? (info.isModified ? ' (изменен)' : ' (базовый)') : ' (пользовательский)';
-            return `<option value="${tableName}">${tableName} (${info.mappingsCount})${suffix}</option>`;
-        }).join('');
+        const currentMappings = getCurrentMappings();
+        const mappingsCount = Object.keys(currentMappings).length;
 
         panel.innerHTML = `
             <div style="margin-bottom: 10px; font-weight: bold; color: #333;">
@@ -1290,147 +891,51 @@
             </div>
 
             <div style="margin-bottom: 15px; font-size: 11px; color: #666;">
-                Автозамена контейнеров + парсинг GitHub + пользовательские столы
+                GitHub API + автозамена контейнеров
             </div>
 
-            <!-- Табы -->
-            <div style="margin-bottom: 15px; border-bottom: 1px solid #ddd;">
-                <button class="wms-tab-button active" data-tab="main">Основное</button>
-                <button class="wms-tab-button" data-tab="tables">Управление столами</button>
-                <button class="wms-tab-button" data-tab="mappings">Маппинги</button>
-                <button class="wms-tab-button" data-tab="updates">Обновления</button>
-            </div>
-
-            <!-- Основная вкладка -->
-            <div id="wms-tab-main" class="wms-tab-content">
-                <div class="wms-section">
-                    <div style="font-weight: bold; margin-bottom: 8px; color: #333;">
-                        🎯 Активный стол: <span style="color: #FF5722;">${currentPreset}</span>
-                    </div>
-                    <div style="display: flex; gap: 5px; align-items: center; margin-bottom: 8px;">
-                        <select id="wms-table-preset" style="flex: 1; padding: 5px; border: 1px solid #ddd; border-radius: 3px; font-size: 11px;">
-                            <option value="">-- Переключить на стол --</option>
-                            ${tablesSelectOptions}
-                        </select>
-                        <button id="wms-switch-preset" style="padding: 5px 10px; background: #FF5722; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 11px;">
-                            Переключить
-                        </button>
-                    </div>
+            <div class="wms-section">
+                <div style="font-weight: bold; margin-bottom: 8px; color: #333;">
+                    🎯 Активный стол: <span style="color: #FF5722;">${currentPreset}</span> (${mappingsCount} направлений)
                 </div>
-
-                <div class="wms-section">
-                    <label style="display: block; margin-bottom: 5px; font-weight: bold;">Размер шрифта (px):</label>
-                    <div style="display: flex; gap: 5px; align-items: center;">
-                        <input type="number" id="wms-font-size-input" value="${parseInt(LARGE_FONT_SIZE)}" min="12" max="100" style="width: 80px; padding: 5px; border: 1px solid #ddd; border-radius: 3px;">
-                        <span style="font-size: 11px; color: #666;">px</span>
-                        <button id="wms-apply-font-size" style="padding: 5px 10px; background: #9C27B0; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 11px;">
-                            Применить
-                        </button>
-                    </div>
-                    <div style="font-size: 10px; color: #888; margin-top: 2px;" class="current-font-size">Текущий: ${LARGE_FONT_SIZE}</div>
-                </div>
-
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-bottom: 15px;">
-                    <button id="wms-test-now" style="padding: 8px 12px; background: #2196F3; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 11px;">
-                        🔍 Тест сейчас
-                    </button>
-                    <button id="wms-diagnose" style="padding: 8px 12px; background: #607D8B; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 11px;">
-                        🔧 Диагностика
+                <div style="display: flex; gap: 5px; margin-bottom: 8px;">
+                    <select id="wms-table-preset" style="flex: 1; padding: 5px; border: 1px solid #ddd; border-radius: 3px; font-size: 11px;">
+                        <option value="">-- Переключить на стол --</option>
+                        ${Object.keys(userPresets).map(tableName => {
+                            const count = Object.keys(userPresets[tableName]).length;
+                            return `<option value="${tableName}">${tableName} (${count})</option>`;
+                        }).join('')}
+                    </select>
+                    <button id="wms-switch-preset" style="padding: 5px 10px; background: #FF5722; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 11px;">
+                        Переключить
                     </button>
                 </div>
             </div>
 
-            <!-- Вкладка управления столами -->
-            <div id="wms-tab-tables" class="wms-tab-content" style="display: none;">
-                <div class="wms-section">
-                    <div style="font-weight: bold; margin-bottom: 10px;">📝 Создать новый стол</div>
-                    <div style="display: flex; gap: 5px; margin-bottom: 10px;">
-                        <input type="text" id="wms-new-table-name" placeholder="Название нового стола" style="flex: 1; padding: 5px; border: 1px solid #ddd; border-radius: 3px;">
-                        <button id="wms-create-table" style="padding: 5px 10px; background: #4CAF50; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 11px;">
-                            Создать
-                        </button>
-                    </div>
-                </div>
-
-                <div class="wms-section">
-                    <div style="font-weight: bold; margin-bottom: 10px;">📋 Все столы</div>
-                    <div id="wms-tables-list" style="max-height: 300px; overflow-y: auto;"></div>
+            <div class="wms-section">
+                <label style="display: block; margin-bottom: 5px; font-weight: bold;">Размер шрифта (px):</label>
+                <div style="display: flex; gap: 5px; align-items: center;">
+                    <input type="number" id="wms-font-size-input" value="${parseInt(LARGE_FONT_SIZE)}" min="12" max="100" style="width: 80px; padding: 5px; border: 1px solid #ddd; border-radius: 3px;">
+                    <span style="font-size: 11px; color: #666;">px</span>
+                    <button id="wms-apply-font-size" style="padding: 5px 10px; background: #9C27B0; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 11px;">
+                        Применить
+                    </button>
                 </div>
             </div>
 
-            <!-- Вкладка маппингов -->
-            <div id="wms-tab-mappings" class="wms-tab-content" style="display: none;">
-                <div class="wms-section">
-                    <div style="font-weight: bold; margin-bottom: 10px;">
-                        Направления в ${currentPreset}:
-                        <span id="wms-mappings-count" style="color: #666; font-weight: normal;">(${Object.keys(getCurrentMappings()).length})</span>
-                    </div>
-
-                    <div style="margin-bottom: 15px;">
-                        <label style="display: block; margin-bottom: 5px;">Добавить направление (только буквенное название):</label>
-                        <input type="text" id="wms-direction-input" style="width: 100%; padding: 5px; border: 1px solid #ddd; border-radius: 3px; margin-bottom: 5px;" placeholder="Например: Дыбенко">
-                        <label style="display: block; margin-bottom: 5px;">Контейнер:</label>
-                        <input type="text" id="wms-container-input" style="width: 100%; padding: 5px; border: 1px solid #ddd; border-radius: 3px; margin-bottom: 10px;" placeholder="Например: 2---Дыбенко">
-                        <button id="wms-add-mapping" style="width: 100%; padding: 8px 12px; background: #4CAF50; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 11px;">
-                            Добавить в ${currentPreset}
-                        </button>
-                        <div style="font-size: 10px; color: #888; margin-top: 5px;">
-                            📝 Из "(Б-12) Дыбенко---156-157---" берется только "Дыбенко"
-                        </div>
-                    </div>
-
-                    <div style="display: flex; gap: 5px; margin-bottom: 10px;">
-                        <button id="wms-reset-preset" style="flex: 1; padding: 4px 8px; background: #9E9E9E; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 10px;">
-                            Сбросить к исходному
-                        </button>
-                        <button id="wms-copy-preset" style="flex: 1; padding: 4px 8px; background: #607D8B; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 10px;">
-                            Копировать в буфер
-                        </button>
-                    </div>
-
-                    <div id="wms-mappings-list" style="max-height: 200px; overflow-y: auto; border: 1px solid #eee; padding: 5px; background: #f9f9f9;"></div>
-                </div>
+            <div style="margin-bottom: 15px;">
+                <button id="wms-update-script" style="width: 100%; padding: 12px; background: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 14px; font-weight: bold;">
+                    🚀 Обновить скрипт через GitHub API
+                </button>
             </div>
 
-            <!-- Вкладка обновлений -->
-            <div id="wms-tab-updates" class="wms-tab-content" style="display: none;">
-                <div class="wms-section">
-                    <div style="font-weight: bold; margin-bottom: 20px; color: #333; text-align: center;">
-                        🔄 Обновление скрипта
-                    </div>
-                    
-                    <div style="margin-bottom: 20px; text-align: center;">
-                        <button id="wms-update-script" style="width: 100%; padding: 15px; background: #4CAF50; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: bold; box-shadow: 0 4px 12px rgba(76,175,80,0.3);">
-                            🚀 Обновить скрипт
-                        </button>
-                    </div>
-                    
-                    <div style="font-size: 11px; color: #666; line-height: 1.4; margin-bottom: 15px; text-align: center;">
-                        <strong>Текущая версия:</strong> ${CURRENT_VERSION}<br>
-                        <strong>Метод:</strong> Парсинг GitHub с обходом кэша<br>
-                        <strong>Методы:</strong> Raw URL → HTML парсинг → GitHub API
-                    </div>
-                    
-                    <div style="padding: 12px; background: #e8f5e8; border-radius: 5px; font-size: 11px; color: #2e7d32; text-align: center;">
-                        ✅ <strong>Умное обновление:</strong><br>
-                        3 метода обхода кэширования GitHub для гарантированного получения актуальной версии.
-                    </div>
-                    
-                    <div style="margin-top: 15px; text-align: center;">
-                        <button onclick="window.open('${UPDATE_CONFIG.GITHUB_REPO}')" style="padding: 8px 16px; background: #333; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 11px;">
-                            📁 Открыть GitHub
-                        </button>
-                    </div>
-                    
-                    <div style="margin-top: 15px;">
-                        <button id="wms-force-update-presets" style="width: 100%; padding: 6px; background: #9E9E9E; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 11px;">
-                            🔄 Обновить только пресеты
-                        </button>
-                        <div style="font-size: 10px; color: #888; margin-top: 2px; text-align: center;">
-                            Если нужно обновить только направления столов
-                        </div>
-                    </div>
-                </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-bottom: 15px;">
+                <button id="wms-test-now" style="padding: 8px 12px; background: #2196F3; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 11px;">
+                    🔍 Тест сейчас
+                </button>
+                <button id="wms-diagnose" style="padding: 8px 12px; background: #607D8B; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 11px;">
+                    🔧 Диагностика
+                </button>
             </div>
 
             <div style="margin-top: 15px; text-align: center; padding-top: 10px; border-top: 1px solid #ddd;">
@@ -1441,140 +946,30 @@
         `;
 
         document.body.appendChild(panel);
-
-        // Обработчики табов
-        panel.querySelectorAll('.wms-tab-button').forEach(button => {
-            button.addEventListener('click', function() {
-                const tabName = this.dataset.tab;
-
-                // Переключить активную кнопку
-                panel.querySelectorAll('.wms-tab-button').forEach(btn => btn.classList.remove('active'));
-                this.classList.add('active');
-
-                // Показать соответствующий контент
-                panel.querySelectorAll('.wms-tab-content').forEach(content => content.style.display = 'none');
-                const targetContent = panel.querySelector(`#wms-tab-${tabName}`);
-                if (targetContent) {
-                    targetContent.style.display = 'block';
-                }
-            });
-        });
-
-        // Обработчики событий
         setupPanelEventHandlers(panel);
-
-        updateMappingsList();
-        updateTablesList();
     }
 
     function setupPanelEventHandlers(panel) {
+        // Обновление скрипта
+        document.getElementById('wms-update-script').addEventListener('click', function() {
+            const updater = new ScriptUpdater();
+            updater.updateScript();
+        });
+
         // Переключение пресета
         document.getElementById('wms-switch-preset').addEventListener('click', function() {
             const selectedTable = document.getElementById('wms-table-preset').value;
-            if (selectedTable) {
-                const success = switchToPreset(selectedTable);
-                if (success) {
-                    panel.style.display = 'none';
-                    createControlPanel();
-                    document.getElementById('wms-control-panel').style.display = 'block';
-                    showNotification(`Переключено на "${selectedTable}" с ${Object.keys(getCurrentMappings()).length} направлениями`, 'success');
-                } else {
-                    showNotification('Ошибка переключения пресета', 'error');
-                }
-            } else {
-                showNotification('Выберите стол для переключения', 'error');
-            }
-        });
-
-        // Создание нового стола
-        document.getElementById('wms-create-table').addEventListener('click', function() {
-            const tableName = document.getElementById('wms-new-table-name').value.trim();
-            const result = createCustomTable(tableName);
-
-            if (result.success) {
-                document.getElementById('wms-new-table-name').value = '';
-                updateTablesList();
-                showNotification(result.message, 'success');
-            } else {
-                showNotification(result.message, 'error');
-            }
-        });
-
-        // КНОПКА ОБНОВЛЕНИЯ СКРИПТА
-        document.getElementById('wms-update-script').addEventListener('click', function() {
-            updateScript();
-        });
-
-        // Обновление только пресетов
-        document.getElementById('wms-force-update-presets').addEventListener('click', function() {
-            if (confirm('Обновить пресеты направлений до актуальной версии? Пользовательские направления будут сохранены.')) {
-                localStorage.removeItem('wms_last_version');
-                loadSettings();
-                
-                const panel = document.getElementById('wms-control-panel');
+            if (selectedTable && userPresets[selectedTable]) {
+                currentPreset = selectedTable;
+                saveSettings();
                 panel.style.display = 'none';
                 createControlPanel();
                 document.getElementById('wms-control-panel').style.display = 'block';
-                
-                showNotification('Пресеты направлений обновлены!', 'success');
+                showNotification(`Переключено на "${selectedTable}"`, 'success');
             }
         });
 
-        // Остальные обработчики...
-        document.getElementById('wms-reset-preset').addEventListener('click', function() {
-            if (confirm(`Сбросить "${currentPreset}" к исходному состоянию? Все изменения будут потеряны!`)) {
-                const success = resetPresetToDefault(currentPreset);
-                if (success) {
-                    panel.style.display = 'none';
-                    createControlPanel();
-                    document.getElementById('wms-control-panel').style.display = 'block';
-                    showNotification(`"${currentPreset}" сброшен к исходному состоянию`, 'success');
-                } else {
-                    showNotification('Ошибка сброса пресета', 'error');
-                }
-            }
-        });
-
-        document.getElementById('wms-copy-preset').addEventListener('click', function() {
-            const currentMappings = getCurrentMappings();
-            const jsonText = JSON.stringify(currentMappings, null, 2);
-            navigator.clipboard.writeText(jsonText).then(() => {
-                showNotification(`Пресет "${currentPreset}" скопирован в буфер обмена`, 'success');
-            }).catch(() => {
-                console.log('Данные пресета:', jsonText);
-                showNotification('Данные выведены в консоль (ошибка копирования)', 'info');
-            });
-        });
-
-        document.getElementById('wms-add-mapping').addEventListener('click', function() {
-            const locationName = document.getElementById('wms-direction-input').value.trim();
-            const container = document.getElementById('wms-container-input').value.trim();
-
-            if (locationName && container) {
-                addMappingToCurrentPreset(locationName, container);
-                updateMappingsList();
-                updateMappingsCount();
-
-                document.getElementById('wms-direction-input').value = '';
-                document.getElementById('wms-container-input').value = '';
-
-                showNotification(`Добавлено в "${currentPreset}": "${locationName}" → ${container}`, 'success');
-            } else {
-                showNotification('Заполните оба поля', 'error');
-            }
-        });
-
-        document.getElementById('wms-test-now').addEventListener('click', function() {
-            clearElementCache();
-            const result = checkAndReplace(true);
-            showNotification(result ? 'Быстрая проверка выполнена - найдены изменения!' : 'Быстрая проверка - изменений нет', 'info');
-        });
-
-        document.getElementById('wms-diagnose').addEventListener('click', function() {
-            diagnoseElements();
-            showNotification('Диагностика выполнена (смотрите консоль)', 'info');
-        });
-
+        // Применить размер шрифта
         document.getElementById('wms-apply-font-size').addEventListener('click', function() {
             const newSize = document.getElementById('wms-font-size-input').value;
             if (newSize && newSize >= 12 && newSize <= 100) {
@@ -1582,182 +977,62 @@
                 saveSettings();
                 injectCSS();
                 applyLargeFontToContainer1();
-                document.querySelector('#wms-control-panel .current-font-size').textContent = `Текущий: ${LARGE_FONT_SIZE}`;
                 showNotification(`Размер шрифта изменен на ${LARGE_FONT_SIZE}`, 'success');
-            } else {
-                showNotification('Размер должен быть от 12 до 100 пикселей', 'error');
             }
         });
 
+        // Тест сейчас
+        document.getElementById('wms-test-now').addEventListener('click', function() {
+            clearElementCache();
+            const result = checkAndReplace(true);
+            showNotification(result ? 'Проверка выполнена - найдены изменения!' : 'Проверка - изменений нет', 'info');
+        });
+
+        // Диагностика
+        document.getElementById('wms-diagnose').addEventListener('click', function() {
+            console.log('=== ДИАГНОСТИКА ===');
+            console.log('Версия:', CURRENT_VERSION);
+            console.log('Активный пресет:', currentPreset);
+            console.log('Направлений в пресете:', Object.keys(getCurrentMappings()).length);
+
+            const directionElement = getElementByXPath(DIRECTION_XPATH);
+            console.log('Направление:', directionElement ? directionElement.textContent : 'НЕ НАЙДЕНО');
+
+            const containerElement1 = getElementByXPath(CONTAINER_XPATH_1);
+            console.log('Контейнер 1:', containerElement1 ? containerElement1.textContent : 'НЕ НАЙДЕНО');
+
+            showNotification('Диагностика выполнена (смотрите консоль)', 'info');
+        });
+
+        // Закрыть панель
         document.getElementById('wms-close-panel').addEventListener('click', function() {
             panel.style.display = 'none';
         });
     }
 
-    // Обновить список столов
-    function updateTablesList() {
-        const listElement = document.getElementById('wms-tables-list');
-        if (!listElement) return;
+    function createToggleButton() {
+        const button = document.createElement('button');
+        button.id = 'wms-toggle-button';
+        button.innerHTML = '⚙️';
+        button.style.cssText = `
+            position: fixed; top: 10px; right: 10px; width: 50px; height: 50px;
+            border-radius: 50%; background: #4CAF50; color: white; border: none;
+            font-size: 20px; cursor: pointer; z-index: 9998;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15); transition: all 0.3s ease;
+        `;
 
-        listElement.innerHTML = '';
-        const tablesInfo = getAllTablesInfo();
-
-        for (const [tableName, info] of Object.entries(tablesInfo)) {
-            const item = document.createElement('div');
-            item.style.cssText = 'margin-bottom: 10px; padding: 10px; background: white; border-radius: 5px; border: 1px solid #ddd;';
-
-            const typeLabel = info.isBuiltIn ? '🏭 Встроенный' : '👤 Пользовательский';
-            const activeLabel = info.isActive ? ' (АКТИВНЫЙ)' : '';
-            const modifiedLabel = info.isModified ? ' (изменен)' : '';
-
-            item.innerHTML = `
-                <div style="font-weight: bold; margin-bottom: 5px; color: ${info.isActive ? '#FF5722' : '#333'};">
-                    ${tableName}${activeLabel}
-                </div>
-                <div style="font-size: 11px; color: #666; margin-bottom: 8px;">
-                    ${typeLabel} • ${info.mappingsCount} направлений${modifiedLabel}
-                </div>
-                <div style="display: flex; gap: 5px; flex-wrap: wrap;">
-                    ${!info.isActive ? `<button onclick="switchTableFromList('${tableName}')" style="padding: 3px 8px; background: #2196F3; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 10px;">Активировать</button>` : ''}
-                    <button onclick="copyTableFromList('${tableName}')" style="padding: 3px 8px; background: #607D8B; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 10px;">Копировать</button>
-                    ${!info.isBuiltIn ? `<button onclick="renameTableFromList('${tableName}')" style="padding: 3px 8px; background: #FF9800; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 10px;">Переименовать</button>` : ''}
-                    ${!info.isBuiltIn ? `<button onclick="deleteTableFromList('${tableName}')" style="padding: 3px 8px; background: #f44336; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 10px;">Удалить</button>` : ''}
-                    ${info.isBuiltIn && info.isModified ? `<button onclick="resetTableFromList('${tableName}')" style="padding: 3px 8px; background: #9E9E9E; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 10px;">Сбросить</button>` : ''}
-                </div>
-            `;
-
-            listElement.appendChild(item);
-        }
-    }
-
-    // Глобальные функции для управления столами из списка
-    window.switchTableFromList = function(tableName) {
-        const success = switchToPreset(tableName);
-        if (success) {
+        button.addEventListener('click', function() {
             const panel = document.getElementById('wms-control-panel');
-            panel.style.display = 'none';
-            createControlPanel();
-            document.getElementById('wms-control-panel').style.display = 'block';
-            showNotification(`Переключено на "${tableName}"`, 'success');
-        }
-    };
-
-    window.copyTableFromList = function(tableName) {
-        const newName = prompt(`Введите название для копии стола "${tableName}":`);
-        if (newName) {
-            const result = copyTable(tableName, newName);
-            if (result.success) {
-                updateTablesList();
-                showNotification(result.message, 'success');
+            if (panel) {
+                panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
             } else {
-                showNotification(result.message, 'error');
+                createControlPanel();
+                document.getElementById('wms-control-panel').style.display = 'block';
             }
-        }
-    };
+        });
 
-    window.renameTableFromList = function(tableName) {
-        const newName = prompt(`Введите новое название для стола "${tableName}":`);
-        if (newName) {
-            const result = renameTable(tableName, newName);
-            if (result.success) {
-                updateTablesList();
-                const panel = document.getElementById('wms-control-panel');
-                if (currentPreset === newName) {
-                    panel.style.display = 'none';
-                    createControlPanel();
-                    document.getElementById('wms-control-panel').style.display = 'block';
-                }
-                showNotification(result.message, 'success');
-            } else {
-                showNotification(result.message, 'error');
-            }
-        }
-    };
-
-    window.deleteTableFromList = function(tableName) {
-        if (confirm(`Удалить стол "${tableName}" со всеми маппингами?`)) {
-            const result = deleteCustomTable(tableName);
-            if (result.success) {
-                updateTablesList();
-                const panel = document.getElementById('wms-control-panel');
-                if (currentPreset !== tableName) {
-                    updateTablesList();
-                } else {
-                    panel.style.display = 'none';
-                    createControlPanel();
-                    document.getElementById('wms-control-panel').style.display = 'block';
-                }
-                showNotification(result.message, 'success');
-            } else {
-                showNotification(result.message, 'error');
-            }
-        }
-    };
-
-    window.resetTableFromList = function(tableName) {
-        if (confirm(`Сбросить стол "${tableName}" к исходному состоянию?`)) {
-            const success = resetPresetToDefault(tableName);
-            if (success) {
-                updateTablesList();
-                if (currentPreset === tableName) {
-                    updateMappingsList();
-                    updateMappingsCount();
-                }
-                showNotification(`Стол "${tableName}" сброшен`, 'success');
-            }
-        }
-    };
-
-    // Обновить счетчик маппингов
-    function updateMappingsCount() {
-        const countElement = document.getElementById('wms-mappings-count');
-        if (countElement) {
-            countElement.textContent = `(${Object.keys(getCurrentMappings()).length})`;
-        }
+        document.body.appendChild(button);
     }
-
-    function updateMappingsList() {
-        const listElement = document.getElementById('wms-mappings-list');
-        if (listElement) {
-            listElement.innerHTML = '';
-            const currentMappings = getCurrentMappings();
-
-            for (const [locationName, container] of Object.entries(currentMappings)) {
-                const item = document.createElement('div');
-                item.style.cssText = 'margin-bottom: 8px; padding: 5px; background: white; border-radius: 3px; font-size: 11px; position: relative;';
-
-                const locationDiv = document.createElement('div');
-                locationDiv.style.cssText = 'font-weight: bold; color: #333; padding-right: 25px;';
-                locationDiv.textContent = locationName;
-
-                const containerDiv = document.createElement('div');
-                containerDiv.style.cssText = 'color: #666;';
-                containerDiv.textContent = `→ ${container}`;
-
-                const deleteBtn = document.createElement('button');
-                deleteBtn.style.cssText = 'position: absolute; top: 5px; right: 5px; padding: 2px 6px; background: #f44336; color: white; border: none; border-radius: 2px; cursor: pointer; font-size: 10px;';
-                deleteBtn.textContent = '×';
-                deleteBtn.onclick = () => deleteMapping(locationName);
-
-                item.appendChild(locationDiv);
-                item.appendChild(containerDiv);
-                item.appendChild(deleteBtn);
-                listElement.appendChild(item);
-            }
-        }
-
-        updateMappingsCount();
-    }
-
-    // Глобальная функция для удаления соответствий
-    window.deleteMapping = function(locationName) {
-        const success = removeMappingFromCurrentPreset(locationName);
-        if (success) {
-            updateMappingsList();
-            updateMappingsCount();
-            showNotification(`Удалено из "${currentPreset}": "${locationName}"`, 'info');
-        }
-    };
 
     // ========== УПРАВЛЕНИЕ РЕЖИМАМИ ==========
 
@@ -1766,12 +1041,8 @@
             clearInterval(normalCheckTimer);
         }
 
-        // Применить увеличенный шрифт
-        setTimeout(() => {
-            applyLargeFontToContainer1();
-        }, 500);
+        setTimeout(() => applyLargeFontToContainer1(), 500);
 
-        // Основной цикл проверок
         normalCheckTimer = setInterval(() => {
             if (isEnabled) {
                 quickCheck();
@@ -1782,46 +1053,16 @@
         console.log(`🚀 Запущен обычный режим (каждые ${CHECK_INTERVAL}ms)`);
     }
 
-    function startFastCheckMode() {
-        if (fastCheckTimer) {
-            clearInterval(fastCheckTimer);
-        }
-
-        fastCheckTimer = setInterval(() => {
-            if (isEnabled) {
-                quickCheck();
-            }
-        }, 100);
-
-        // Отключаем быстрый режим через 10 секунд
-        setTimeout(() => {
-            if (fastCheckTimer) {
-                clearInterval(fastCheckTimer);
-                fastCheckTimer = null;
-                console.log('⚡ Быстрый режим автоматически отключен');
-            }
-        }, 10000);
-
-        console.log('⚡ Запущен быстрый режим проверок (100ms на 10 сек)');
-    }
-
-    // ========== МОНИТОРИНГ DOM ==========
-
     function setupDOMObserver() {
-        if (!window.MutationObserver) {
-            console.warn('MutationObserver не поддерживается');
-            return;
-        }
+        if (!window.MutationObserver) return;
 
         const observer = new MutationObserver((mutations) => {
             if (!isEnabled) return;
 
             let shouldCheck = false;
-
             mutations.forEach((mutation) => {
                 if (mutation.type === 'childList' || mutation.type === 'characterData') {
                     const target = mutation.target;
-
                     if (target.tagName === 'B' || target.tagName === 'H1' ||
                         target.closest('div[5]') || target.querySelector('b, h1')) {
                         shouldCheck = true;
@@ -1843,11 +1084,9 @@
         console.log('👀 DOM Observer активирован');
     }
 
-    // ========== ГОРЯЧИЕ КЛАВИШИ ==========
-
     function setupHotkeys() {
         document.addEventListener('keydown', function(e) {
-            // Ctrl+Shift+W - открыть/закрыть панель управления
+            // Ctrl+Shift+W - открыть/закрыть панель
             if (e.ctrlKey && e.shiftKey && e.code === 'KeyW') {
                 e.preventDefault();
                 const panel = document.getElementById('wms-control-panel');
@@ -1859,123 +1098,52 @@
                 }
             }
 
+            // Ctrl+Shift+U - обновить скрипт
+            if (e.ctrlKey && e.shiftKey && e.code === 'KeyU') {
+                e.preventDefault();
+                const updater = new ScriptUpdater();
+                updater.updateScript();
+            }
+
             // Ctrl+Shift+T - быстрый тест
             if (e.ctrlKey && e.shiftKey && e.code === 'KeyT') {
                 e.preventDefault();
                 clearElementCache();
                 checkAndReplace(true);
             }
-
-            // Ctrl+Shift+F - применить шрифт принудительно
-            if (e.ctrlKey && e.shiftKey && e.code === 'KeyF') {
-                e.preventDefault();
-                applyLargeFontToContainer1();
-                showNotification('Шрифт переприменен принудительно', 'info');
-            }
-
-            // Ctrl+Shift+D - диагностика
-            if (e.ctrlKey && e.shiftKey && e.code === 'KeyD') {
-                e.preventDefault();
-                diagnoseElements();
-                showNotification('Диагностика выполнена (смотрите консоль)', 'info');
-            }
-
-            // Ctrl+Shift+Q - режим быстрых проверок
-            if (e.ctrlKey && e.shiftKey && e.code === 'KeyQ') {
-                e.preventDefault();
-                startFastCheckMode();
-                showNotification('Режим быстрых проверок запущен!', 'info');
-            }
-
-            // Ctrl+Shift+U - обновить скрипт
-            if (e.ctrlKey && e.shiftKey && e.code === 'KeyU') {
-                e.preventDefault();
-                updateScript();
-            }
         });
 
         console.log('⌨️ Горячие клавиши активированы');
     }
 
-    // ========== КНОПКА УПРАВЛЕНИЯ ==========
-
-    function createToggleButton() {
-        const button = document.createElement('button');
-        button.id = 'wms-toggle-button';
-        button.innerHTML = '⚙️';
-        button.style.cssText = `
-            position: fixed;
-            top: 10px;
-            right: 10px;
-            width: 50px;
-            height: 50px;
-            border-radius: 50%;
-            background: #4CAF50;
-            color: white;
-            border: none;
-            font-size: 20px;
-            cursor: pointer;
-            z-index: 9998;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-            transition: all 0.3s ease;
-        `;
-
-        button.addEventListener('click', function() {
-            const panel = document.getElementById('wms-control-panel');
-            if (panel) {
-                panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
-            } else {
-                createControlPanel();
-                document.getElementById('wms-control-panel').style.display = 'block';
-            }
-        });
-
-        button.addEventListener('mouseenter', function() {
-            button.style.transform = 'scale(1.1)';
-        });
-
-        button.addEventListener('mouseleave', function() {
-            button.style.transform = 'scale(1)';
-        });
-
-        document.body.appendChild(button);
-    }
-
     // ========== ИНИЦИАЛИЗАЦИЯ ==========
 
-    // Функция инициализации
     function initialize() {
-        console.log('🚀 WMS Container Override Enhanced v3.0 с парсингом GitHub активирован');
+        console.log('🚀 WMS Container Override Enhanced v4.0 с GitHub API активирован');
 
-        // Внедрить CSS стили
         injectCSS();
-
-        // Загрузить настройки
         loadSettings();
-
-        // Создать кнопку управления
         createToggleButton();
-
-        // Настроить горячие клавиши
         setupHotkeys();
-
-        // Настроить наблюдатель за DOM
         setupDOMObserver();
-
-        // Запустить обычный режим
         startNormalMode();
 
-        // Начальная проверка
-        setTimeout(() => {
-            checkAndReplace(true);
-        }, 1000);
+        setTimeout(() => checkAndReplace(true), 1000);
 
         const presetsCount = Object.keys(getCurrentMappings()).length;
         const lastVersion = localStorage.getItem('wms_last_version');
-        const updateInfo = lastVersion !== CURRENT_VERSION ? ' (пресеты обновлены!)' : '';
-        
-        showNotification(`WMS Override v${CURRENT_VERSION} активен! Стол: "${currentPreset}" (${presetsCount} направлений)${updateInfo}`, 'success');
+        const updateInfo = lastVersion !== CURRENT_VERSION ? ' (обновлено!)' : '';
+
+        showNotification(`WMS Override v${CURRENT_VERSION} активен! Стол: "${currentPreset}" (${presetsCount})${updateInfo}`, 'success');
     }
+
+    // Глобальные функции
+    window.updateWMSScript = () => {
+        const updater = new ScriptUpdater();
+        updater.updateScript();
+    };
+
+    window.wmsShowVersion = () => console.log(`WMS Container Override v${CURRENT_VERSION}`);
 
     // Ожидание полной загрузки DOM
     if (document.readyState === 'loading') {
@@ -1984,93 +1152,8 @@
         setTimeout(initialize, 150);
     }
 
-    // ========== ДОПОЛНИТЕЛЬНЫЕ ФУНКЦИИ ДЛЯ ОТЛАДКИ ==========
-    
-    // Принудительное обновление с очисткой кэша
-    window.wmsForceUpdate = async function() {
-        console.log('🔧 Принудительное обновление с очисткой кэша...');
-        
-        // Очищаем кэш браузера
-        if ('caches' in window) {
-            try {
-                const cacheNames = await caches.keys();
-                for (const cacheName of cacheNames) {
-                    await caches.delete(cacheName);
-                }
-                console.log('🗑️ Кэш браузера очищен');
-            } catch (e) {
-                console.log('⚠️ Не удалось очистить кэш браузера');
-            }
-        }
-        
-        // Запускаем обновление
-        updateScript();
-    };
-
-    // Проверка версии на GitHub
-    window.wmsCheckVersion = async function() {
-        try {
-            console.log('🔍 Проверка актуальной версии на GitHub...');
-            showNotification('Проверяем версию на GitHub...', 'info');
-            
-            let githubVersion = 'неизвестно';
-            
-            // Пробуем получить версию через разные методы
-            try {
-                const scriptContent = await fetchFromRawURL();
-                const versionMatch = scriptContent.match(/@version\s+([\d.]+)/);
-                if (versionMatch) githubVersion = versionMatch[1];
-            } catch (e) {
-                try {
-                    const scriptContent = await fetchFromGitHubHTML();
-                    const versionMatch = scriptContent.match(/@version\s+([\d.]+)/);
-                    if (versionMatch) githubVersion = versionMatch[1];
-                } catch (e2) {
-                    console.warn('Не удалось получить версию с GitHub');
-                }
-            }
-            
-            console.log(`📋 Текущая версия: ${CURRENT_VERSION}`);
-            console.log(`📋 Версия на GitHub: ${githubVersion}`);
-            
-            if (githubVersion !== 'неизвестно') {
-                const currentBase = CURRENT_VERSION.split('.')[0] + '.' + CURRENT_VERSION.split('.')[1];
-                const githubBase = githubVersion.split('.')[0] + '.' + githubVersion.split('.')[1];
-                
-                if (githubBase !== currentBase) {
-                    console.log('🆕 Доступна новая версия!');
-                    showNotification(`Доступна новая версия: ${githubVersion}`, 'success');
-                    return true;
-                } else {
-                    console.log('✅ У вас актуальная версия');
-                    showNotification('У вас актуальная версия', 'success');
-                    return false;
-                }
-            } else {
-                showNotification('Не удалось проверить версию', 'error');
-                return null;
-            }
-            
-        } catch (error) {
-            console.error('❌ Ошибка проверки версии:', error);
-            showNotification('Ошибка проверки версии', 'error');
-            return null;
-        }
-    };
-
-    // ========== ГЛОБАЛЬНЫЕ ФУНКЦИИ ==========
-    
-    // Упрощенные глобальные функции
-    window.wmsUpdate = () => updateScript();  // Единственная функция обновления
-    window.wmsShowVersion = () => console.log(`WMS Container Override v${CURRENT_VERSION}`);
-    window.wmsForceUpdatePresets = () => {
-        localStorage.removeItem('wms_last_version');
-        loadSettings();
-        console.log('Пресеты обновлены!');
-    };
-
-    console.log('✅ WMS Container Override Enhanced v3.0 с парсингом GitHub загружен');
-    console.log('🔧 Команды: wmsUpdate(), wmsShowVersion(), wmsForceUpdatePresets()');
-    console.log('🔧 Отладка: wmsForceUpdate(), wmsCheckVersion()');
+    console.log('✅ WMS Container Override Enhanced v4.0 загружен');
+    console.log('🔧 Команды: updateWMSScript(), wmsShowVersion()');
+    console.log('⌨️ Горячие клавиши: Ctrl+Shift+W (панель), Ctrl+Shift+U (обновление), Ctrl+Shift+T (тест)');
 
 })();

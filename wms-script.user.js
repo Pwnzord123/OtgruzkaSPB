@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         WMS Container Override Enhanced - Complete with GitHub API
 // @namespace    http://tampermonkey.net/
-// @version      4.0
+// @version      6.0
 // @description  Автозамена контейнеров WMS с полной функциональностью + GitHub API обновления
 // @author       Жигалов Ю.В.
 // @match        http://edu.sutd.ru/moodle/*

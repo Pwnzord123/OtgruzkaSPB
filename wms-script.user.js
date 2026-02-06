@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         WMS Container Override Enhanced 06.02.2026 апдейт
 // @namespace    http://tampermonkey.net/
-    // @version      11.0
+    // @version      12.0
 // @description  Автозамена контейнеров WMS
 // @author       Жигалов Ю.В.
 // @match        https://wms.vseinstrumenti.ru/*
